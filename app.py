@@ -45,9 +45,10 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 # Database initialization with error handling
 with app.app_context():
     try:
+        db.drop_all()
         db.create_all()
         db.session.commit()
-        logging.info("Database tables created successfully")
+        logging.info("Database tables recreated successfully")
     except Exception as e:
         logging.error(f"Error creating database tables: {str(e)}")
         raise
