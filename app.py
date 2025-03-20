@@ -88,11 +88,15 @@ def register():
         username = request.form['username']
         password = request.form['password']
         role = request.form['role']
-        class_name = request.form.get('class')
-        teacher_code = request.form.get('teacher_code') # Added teacher_code
+        class_name = request.form.get('class') # Get class if applicable
+
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash('Username already exists. Please choose another.')
+            return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], role=role, class_name=class_name, teacher_code=teacher_code) # Added teacher_code
+        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], role=role, class_name=class_name)
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
