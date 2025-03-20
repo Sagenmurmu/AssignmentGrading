@@ -64,8 +64,14 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        teacher_code = request.form.get('teacher_code')
+        
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
+            if user.role == 'teacher':
+                if not teacher_code or teacher_code != user.teacher_code:
+                    flash('Invalid teacher code')
+                    return render_template('login.html')
             login_user(user)
             if user.role == 'teacher':
                 return redirect(url_for('teacher_dashboard'))
@@ -96,7 +102,9 @@ def register():
             return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], role=role, class_name=class_name)
+        teacher_code = request.form.get('teacher_code') if role == 'teacher' else None
+        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], 
+                       role=role, class_name=class_name, teacher_code=teacher_code)
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
