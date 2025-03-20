@@ -62,23 +62,18 @@ def allowed_file(filename):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        teacher_code = request.form['teacher_code']
         password = request.form['password']
-        teacher_code = request.form.get('teacher_code')
         
-        user = User.query.filter_by(username=username).first()
+        user = User.query.filter_by(teacher_code=teacher_code).first()
         if user and check_password_hash(user.password_hash, password):
-            if user.role == 'teacher':
-                if not teacher_code or teacher_code != user.teacher_code:
-                    flash('Invalid teacher code')
-                    return render_template('login.html')
             login_user(user)
             if user.role == 'teacher':
                 return redirect(url_for('teacher_dashboard'))
             else:
                 return redirect(url_for('home'))
         else:
-            flash('Invalid username or password')
+            flash('Invalid teacher code or password')
     return render_template('login.html')
 
 
