@@ -1,4 +1,3 @@
-
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import TEXT
@@ -17,13 +16,13 @@ class User(UserMixin, db.Model):
     class_name = db.Column(db.String(20), nullable=True)  # e.g., "10A", "10B"
     teacher_code = db.Column(db.String(128), nullable=True)  # For teacher verification
     student_code = db.Column(db.String(128), nullable=True)  # For student verification
-    
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
-        
+
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
-        
+
     def __repr__(self):
         return f'<User {self.username}>'
 
@@ -59,8 +58,7 @@ class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     answer = db.Column(TEXT, nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    student = db.relationship('User', backref='submissions')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     submission_date = db.Column(db.DateTime, default=datetime.utcnow)
     introduction_marks = db.Column(db.Float)
     main_body_marks = db.Column(db.Float)
@@ -77,19 +75,7 @@ class Submission(db.Model):
     plagiarism_score = db.Column(db.Float)
     plagiarism_matches = db.Column(TEXT)
     hash_signature = db.Column(db.String(64))
-    conclusion_marks = db.Column(db.Float)
-    examples_marks = db.Column(db.Float)
-    diagrams_marks = db.Column(db.Float)
-    total_marks = db.Column(db.Float)
-    introduction_feedback = db.Column(TEXT)
-    main_body_feedback = db.Column(TEXT)
-    conclusion_feedback = db.Column(TEXT)
-    examples_feedback = db.Column(TEXT)
-    diagrams_feedback = db.Column(TEXT)
-    ai_detection_score = db.Column(db.Float)
-    plagiarism_score = db.Column(db.Float)
-    plagiarism_matches = db.Column(TEXT)
-    hash_signature = db.Column(db.String(64))
+
 
     def __repr__(self):
         return f'<Submission {self.id}>'

@@ -236,25 +236,15 @@ def submit_answer(question_id):
         submission = Submission(
             answer=answer,
             question_id=question_id,
-            student_id=current_user.id,
-            introduction_marks=grading_result['introduction']['marks'],
-            main_body_marks=grading_result['main_body']['marks'],
-            conclusion_marks=grading_result['conclusion']['marks'],
-            examples_marks=grading_result['examples']['marks'],
-            diagrams_marks=grading_result['diagrams']['marks'],
-            total_marks=grading_result['total_marks'],
-            ai_detection_score=grading_result['ai_detection_score'],
-            introduction_feedback=grading_result['introduction']['feedback'],
-            main_body_feedback=grading_result['main_body']['feedback'],
-            conclusion_feedback=grading_result['conclusion']['feedback'],
-            examples_feedback=grading_result['examples']['feedback'],
-            diagrams_feedback=grading_result['diagrams']['feedback']
+            user_id=current_user.id,
+            **{k: v['marks'] if isinstance(v, dict) else v for k, v in grading_result.items() if k != 'plagiarism_score' and k != 'plagiarism_matches'},
+            **{k+'_feedback': v['feedback'] for k, v in grading_result.items() if isinstance(v, dict) and 'feedback' in v}
         )
         db.session.add(submission)
         db.session.commit()
 
         return render_template('grading.html', 
-                           result=grading_result, 
+                           result=grading_result,
                            submission_id=submission.id,
                            max_marks=question.max_marks)
     except Exception as e:
