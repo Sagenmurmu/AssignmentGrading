@@ -86,7 +86,7 @@ def register():
         role = request.form['role']
         class_name = request.form.get('class') # Get class if applicable
 
-        hashed_password = generate_password_hash(password, method='sha256')
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
         new_user = User(username=username, password=hashed_password, role=role, class_name=class_name)
         db.session.add(new_user)
         db.session.commit()
