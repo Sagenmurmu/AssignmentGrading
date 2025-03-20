@@ -3,7 +3,8 @@ import logging
 from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 import google.generativeai as genai
-from models import db, Submission
+from flask_login import LoginManager, current_user
+from models import db, User, Submission
 from utils import extract_text_from_pdf, extract_text_from_image, analyze_with_gemini
 
 # Configure logging
@@ -26,6 +27,11 @@ genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 # Initialize database
 db.init_app(app)
 
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+
 # Create upload folder if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -33,6 +39,15 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 with app.app_context():
     db.create_all()
     logging.info("Database tables created successfully")
+
+# User loader callback for Flask-Login
+@login_manager.user_loader
+def load_user(id):
+    return User.query.get(int(id))
+
+# Register blueprints
+from routes.auth import auth
+app.register_blueprint(auth, url_prefix='/auth')
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
@@ -48,7 +63,7 @@ def extract_text():
     if 'file' not in request.files:
         flash('No file selected')
         return redirect(url_for('home'))
-    
+
     file = request.files['file']
     if file.filename == '':
         flash('No file selected')
@@ -64,16 +79,20 @@ def extract_text():
                 text = extract_text_from_pdf(filepath)
             else:
                 text = extract_text_from_image(filepath)
-            
+
             return {'success': True, 'text': text}
         except Exception as e:
             logging.error(f"Error extracting text: {str(e)}")
             return {'success': False, 'error': str(e)}
-    
+
     return {'success': False, 'error': 'Invalid file type'}
 
 @app.route('/grade', methods=['POST'])
 def grade():
+    if not current_user.is_authenticated:
+        flash('Please login to submit assignments')
+        return redirect(url_for('auth.login'))
+
     question = request.form.get('question')
     answer = request.form.get('answer')
     max_marks = int(request.form.get('max_marks', 10))
@@ -84,12 +103,13 @@ def grade():
 
     try:
         grading_result = analyze_with_gemini(question, answer, max_marks)
-        
+
         # Store submission in database
         submission = Submission(
             question=question,
             answer=answer,
             max_marks=max_marks,
+            user_id=current_user.id,
             introduction_marks=grading_result['introduction']['marks'],
             main_body_marks=grading_result['main_body']['marks'],
             conclusion_marks=grading_result['conclusion']['marks'],
@@ -113,7 +133,7 @@ def grade():
 @app.route('/review/<int:submission_id>')
 def review(submission_id):
     submission = Submission.query.get_or_404(submission_id)
-    
+
     try:
         review_feedback = analyze_with_gemini(
             submission.question,
