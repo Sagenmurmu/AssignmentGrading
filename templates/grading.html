@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="card-title mb-0">Grading Results</h2>
+                <span class="badge bg-primary">Total: {{ result.total_marks }}/{{ max_marks }}</span>
+            </div>
+            <div class="card-body">
+                {% for section in ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams'] %}
+                <div class="grading-section mb-4">
+                    <h3 class="section-title">
+                        {{ section|title }}
+                        <span class="badge bg-secondary">{{ result[section]['marks'] }} marks</span>
+                    </h3>
+                    <div class="form-group">
+                        <textarea class="form-control" readonly rows="3">{{ result[section]['feedback'] }}</textarea>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ (result[section]['marks'] / max_marks * 100)|round }}%">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if result.ai_detection_score > 0.7 %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    High probability of AI-generated content detected!
+                </div>
+                {% endif %}
+
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('review', submission_id=submission_id) }}" class="btn btn-primary">
+                        <i class="bi bi-journal-text"></i> View Detailed Review
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

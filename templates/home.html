@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Assignment Submission</h2>
+            </div>
+            <div class="card-body">
+                <form id="grading-form" action="{{ url_for('grade') }}" method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="question" class="form-label">Question</label>
+                        <textarea class="form-control" id="question" name="question" rows="3" required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Upload Answer (PDF or Image)</label>
+                        <div class="drop-zone" id="drop-zone">
+                            <div class="drop-zone-prompt">
+                                <i class="bi bi-cloud-upload"></i>
+                                <p>Drag and drop files here or click to upload</p>
+                                <p class="small text-muted">Supported formats: PDF, PNG, JPG</p>
+                            </div>
+                            <input type="file" id="file-upload" class="drop-zone-input" accept=".pdf,.png,.jpg,.jpeg">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="answer" class="form-label">Extracted Text</label>
+                        <textarea class="form-control" id="answer" name="answer" rows="6" required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="max-marks" class="form-label">Maximum Marks</label>
+                        <select class="form-select" id="max-marks" name="max_marks">
+                            <option value="10">10 Marks</option>
+                            <option value="20">20 Marks</option>
+                            <option value="30">30 Marks</option>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" id="extract-text" class="btn btn-secondary">
+                            <i class="bi bi-eye"></i> Extract Text
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Submit for Grading
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

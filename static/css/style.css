@@ -1,0 +1,46 @@
+.drop-zone {
+    border: 2px dashed var(--bs-secondary);
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.drop-zone-active {
+    border-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.drop-zone-prompt {
+    color: var(--bs-secondary);
+}
+
+.drop-zone-prompt i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.drop-zone-input {
+    display: none;
+}
+
+.grading-section {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.section-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.review-content {
+    white-space: pre-line;
+    line-height: 1.6;
+}
+
+.progress {
+    height: 0.5rem;
+}
