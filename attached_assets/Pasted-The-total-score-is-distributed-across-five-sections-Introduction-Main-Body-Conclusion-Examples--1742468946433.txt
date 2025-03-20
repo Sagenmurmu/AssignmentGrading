@@ -1,0 +1,46 @@
+The total score is distributed across five sections — Introduction, Main Body, Conclusion, Examples, and Diagrams.
+The three mandatory sections (Introduction, Main Body, and Conclusion) make up 100% of the base score.
+If Examples and Diagrams are requested or provided as additional information, they are considered bonus marks (extra beyond the base score).
+
+Base Marking (100% Distribution):
+Introduction – 40% of the total base score.
+Main Body – 40% of the total base score.
+Conclusion – 20% of the total base score.
+➡️ Example: If the total marks are out of 10, the distribution would be:
+
+Introduction = 4 marks
+Main Body = 4 marks
+Conclusion = 2 marks
+Bonus Marking (Beyond 100%):
+Examples – If examples are asked in the question and are provided correctly, up to 20% extra can be awarded.
+If examples are not asked but still provided, bonus of 10% can be awarded.
+Diagrams – If diagrams are asked and provided correctly, up to 20% extra can be awarded.
+If diagrams are not asked but still provided, bonus of 10% can be awarded.
+Handwriting – If the handwriting is clear and neat, a 5% bonus can be awarded (only if the total score is below the maximum).
+➡️ Example: If the total marks are out of 10 and examples + diagrams are provided, the student can score up to 14 (10 base marks + 4 bonus marks).
+➡️ If the answer scores full marks in the mandatory sections, bonus marks will not be added if they exceed the total allowed score.
+
+Scaling Method:
+Since the AI model internally grades out of 10, the scores are adjusted according to the scaling factor based on the total possible score.
+
+Scaling Factor = (Total Marks) ÷ 10
+Scaled Marks = AI Marks × Scaling Factor
+➡️ Example: If the AI gives an introduction score of 4/10 and the total score is set to 20:
+
+Scaling Factor = 20 ÷ 10 = 2
+Introduction score = 4 × 2 = 8 marks
+Complete Example (Out of 20):
+Introduction – 40% of 20 → 8 marks
+Main Body – 40% of 20 → 8 marks
+Conclusion – 20% of 20 → 4 marks
+Examples Provided (if not asked) – 10% bonus of 20 → 2 marks
+Diagram Provided (if not asked) – 10% bonus of 20 → 2 marks
+Handwriting Bonus – 5% bonus of 20 → 1 mark
+➡️ If the student answers perfectly and includes examples and diagrams even when not asked, the maximum possible score would be:
+20 (base) + 2 (example) + 2 (diagram) + 1 (handwriting) = 25
+
+✅ Summary:
+Base score = 100% = Introduction (40%) + Main Body (40%) + Conclusion (20%)
+Bonus score = Up to 50% from Examples (10-20%), Diagrams (10-20%), and Handwriting (5%)
+Scaling factor ensures marks are adjusted correctly based on the total score limit.
+Total score is capped at the maximum allowed score (no overflow).
