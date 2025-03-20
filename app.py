@@ -29,8 +29,13 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
 }
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max file size
+
+# Create upload folder if it doesn't exist
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+    logging.info(f"Created upload folder: {app.config['UPLOAD_FOLDER']}")
 
 # Configure Gemini AI
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -48,20 +53,6 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-
-# Create upload folder if it doesn't exist
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
-
-# Database initialization with error handling
-with app.app_context():
-    try:
-        db.create_all()
-        db.session.commit()
-        logging.info("Database tables created successfully")
-    except Exception as e:
-        logging.error(f"Error creating database tables: {str(e)}")
-        raise
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
@@ -202,44 +193,71 @@ def view_question(question_id):
 #Extract and Submit routes
 @app.route('/extract', methods=['POST'])
 def extract_text():
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file selected'}), 400
+    try:
+        logging.debug("Starting text extraction process")
+        if 'file' not in request.files:
+            logging.warning("No file part in request")
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            logging.warning("No selected file")
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
 
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            logging.debug(f"Saving file to: {filepath}")
+            file.save(filepath)
 
-        try:
-            if filename.lower().endswith('.pdf'):
-                text = extract_text_from_pdf(filepath)
-            else:
-                text = extract_text_from_image(filepath)
+            try:
+                if filename.lower().endswith('.pdf'):
+                    logging.debug("Processing PDF file")
+                    text = extract_text_from_pdf(filepath)
+                else:
+                    logging.debug("Processing image file")
+                    text = extract_text_from_image(filepath)
 
-            return jsonify({'success': True, 'text': text}), 200
-        except Exception as e:
-            logging.error(f"Error extracting text: {str(e)}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-        finally:
-            if os.path.exists(filepath):
-                os.remove(filepath)
+                if not text:
+                    raise ValueError("No text extracted from file")
 
-    return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+                logging.info("Text extraction successful")
+                logging.debug(f"Extracted text length: {len(text)}")
+                return jsonify({'success': True, 'text': text}), 200
+
+            except Exception as e:
+                logging.error(f"Error in text extraction: {str(e)}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+            finally:
+                # Clean up uploaded file
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    logging.debug(f"Cleaned up file: {filepath}")
+
+        logging.warning(f"Invalid file type: {file.filename}")
+        return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+
+    except Exception as e:
+        logging.error(f"Unexpected error in extract_text: {str(e)}")
+        return jsonify({'success': False, 'error': 'Server error during text extraction'}), 500
 
 @app.route('/submit/<int:question_id>', methods=['POST'])
 @login_required
 def submit_answer(question_id):
     try:
+        logging.debug(f"Starting submission for question_id: {question_id}")
         question = Question.query.get_or_404(question_id)
         answer = request.form.get('answer')
 
         if not answer:
+            logging.warning("No answer provided in submission")
             flash('Please provide an answer')
             return redirect(url_for('view_question', question_id=question_id))
+
+        # Log input data for debugging
+        logging.debug(f"Question text: {question.question_text}")
+        logging.debug(f"Answer length: {len(answer)}")
+        logging.debug(f"Max marks: {question.max_marks}")
 
         # Validate Gemini API key
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -250,7 +268,10 @@ def submit_answer(question_id):
 
         # Get grading result with error handling
         try:
+            logging.debug("Calling analyze_with_gemini")
             grading_result = analyze_with_gemini(question.question_text, answer, question.max_marks)
+            logging.debug(f"Received grading result: {grading_result}")
+
             if not grading_result or not isinstance(grading_result, dict):
                 logging.error(f"Invalid grading result format: {grading_result}")
                 flash('Error during grading. Please try again.')
@@ -269,33 +290,41 @@ def submit_answer(question_id):
             return redirect(url_for('view_question', question_id=question_id))
 
         # Create submission with validated data
-        submission = Submission(
-            answer=answer,
-            question_id=question_id,
-            student_id=current_user.id,
-            introduction_marks=float(grading_result['introduction']['marks']),
-            main_body_marks=float(grading_result['main_body']['marks']),
-            conclusion_marks=float(grading_result['conclusion']['marks']),
-            examples_marks=float(grading_result['examples']['marks']),
-            diagrams_marks=float(grading_result['diagrams']['marks']),
-            total_marks=float(grading_result['total_marks']),
-            introduction_feedback=str(grading_result['introduction']['feedback']),
-            main_body_feedback=str(grading_result['main_body']['feedback']),
-            conclusion_feedback=str(grading_result['conclusion']['feedback']),
-            examples_feedback=str(grading_result['examples']['feedback']),
-            diagrams_feedback=str(grading_result['diagrams']['feedback'])
-        )
+        try:
+            submission = Submission(
+                answer=answer,
+                question_id=question_id,
+                student_id=current_user.id,
+                introduction_marks=float(grading_result['introduction']['marks']),
+                main_body_marks=float(grading_result['main_body']['marks']),
+                conclusion_marks=float(grading_result['conclusion']['marks']),
+                examples_marks=float(grading_result['examples']['marks']),
+                diagrams_marks=float(grading_result['diagrams']['marks']),
+                total_marks=float(grading_result['total_marks']),
+                introduction_feedback=str(grading_result['introduction']['feedback']),
+                main_body_feedback=str(grading_result['main_body']['feedback']),
+                conclusion_feedback=str(grading_result['conclusion']['feedback']),
+                examples_feedback=str(grading_result['examples']['feedback']),
+                diagrams_feedback=str(grading_result['diagrams']['feedback'])
+            )
 
-        db.session.add(submission)
-        db.session.commit()
+            db.session.add(submission)
+            db.session.commit()
+            logging.info(f"Successfully created submission: {submission.id}")
 
-        return render_template('grading.html', 
-                           result=grading_result,
-                           submission_id=submission.id,
-                           max_marks=question.max_marks)
+            return render_template('grading.html', 
+                                   result=grading_result,
+                                   submission_id=submission.id,
+                                   max_marks=question.max_marks)
+
+        except Exception as e:
+            logging.error(f"Error creating submission: {str(e)}")
+            db.session.rollback()
+            flash('Error saving submission. Please try again.')
+            return redirect(url_for('view_question', question_id=question_id))
 
     except Exception as e:
-        logging.error(f"Error submitting answer: {str(e)}")
+        logging.error(f"Error in submit_answer: {str(e)}")
         db.session.rollback()
         flash('Error during grading. Please try again.')
         return redirect(url_for('view_question', question_id=question_id))
@@ -321,6 +350,16 @@ def review(submission_id):
         logging.error(f"Error generating review: {str(e)}")
         flash('Error generating review. Please try again.')
         return redirect(url_for('home'))
+
+# Database initialization with error handling
+with app.app_context():
+    try:
+        db.create_all()
+        db.session.commit()
+        logging.info("Database tables created successfully")
+    except Exception as e:
+        logging.error(f"Error creating database tables: {str(e)}")
+        raise
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
