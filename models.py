@@ -59,6 +59,7 @@ class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     answer = db.Column(TEXT, nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     submission_date = db.Column(db.DateTime, default=datetime.utcnow)
     introduction_marks = db.Column(db.Float)
     main_body_marks = db.Column(db.Float)
