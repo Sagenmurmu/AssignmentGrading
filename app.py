@@ -258,6 +258,7 @@ def submit_answer(question_id):
         logging.debug(f"Question text: {question.question_text}")
         logging.debug(f"Answer length: {len(answer)}")
         logging.debug(f"Max marks: {question.max_marks}")
+        logging.debug(f"Diagrams required: {question.requires_diagrams}")
 
         # Validate Gemini API key
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -269,7 +270,12 @@ def submit_answer(question_id):
         # Get grading result with error handling
         try:
             logging.debug("Calling analyze_with_gemini")
-            grading_result = analyze_with_gemini(question.question_text, answer, question.max_marks)
+            grading_result = analyze_with_gemini(
+                question.question_text,
+                answer,
+                question.max_marks,
+                diagrams_required=question.requires_diagrams
+            )
             logging.debug(f"Received grading result: {grading_result}")
 
             if not grading_result or not isinstance(grading_result, dict):

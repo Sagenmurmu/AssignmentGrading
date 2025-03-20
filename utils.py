@@ -59,7 +59,7 @@ def extract_text_from_pdf(pdf_path):
         logging.error(f"Error extracting text from PDF {pdf_path}: {str(e)}")
         raise
 
-def analyze_with_gemini(question, answer, max_marks, mode='grade'):
+def analyze_with_gemini(question, answer, max_marks, mode='grade', diagrams_required=False):
     """Analyze text using Gemini AI with improved error handling."""
     try:
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -77,27 +77,38 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
 Question: {question}
 Student Answer: {answer}
 Maximum marks: {max_marks}
+Diagrams Required: {"Yes" if diagrams_required else "No"}
+
+Grading Rules:
+1. Base scoring (out of 10):
+   - Introduction (4 marks max - 40%)
+   - Main Body (4 marks max - 40%)
+   - Conclusion (2 marks max - 20%)
+2. Bonus scoring:
+   - Examples: Mark as 0 if none found
+   - Diagrams: Mark as 0 if none found
+   - Only grade diagrams if they are present in the answer
 
 Return the following JSON structure EXACTLY, with no additional text:
 {{
     "introduction": {{
-        "marks": <number 0-10>,
+        "marks": <number 0-4>,
         "feedback": "<clear feedback>"
     }},
     "main_body": {{
-        "marks": <number 0-10>,
+        "marks": <number 0-4>,
         "feedback": "<clear feedback>"
     }},
     "conclusion": {{
-        "marks": <number 0-10>,
+        "marks": <number 0-2>,
         "feedback": "<clear feedback>"
     }},
     "examples": {{
-        "marks": <number 0-10>,
+        "marks": <number 0-2>,
         "feedback": "<clear feedback>"
     }},
     "diagrams": {{
-        "marks": <number 0-10>,
+        "marks": <number 0-2>,
         "feedback": "<clear feedback>"
     }},
     "ai_detection_score": <number 0-1>
@@ -150,18 +161,40 @@ Return the following JSON structure EXACTLY, with no additional text:
 
             # Calculate scaled marks
             scaled_result = {}
-            for section in required_fields:
+            for section in ['introduction', 'main_body', 'conclusion']:
                 try:
                     marks = float(result[section]['marks'])
-                    marks = max(0, min(10, marks))  # Ensure marks are between 0 and 10
+                    section_max = max_marks * (0.4 if section in ['introduction', 'main_body'] else 0.2)
+                    scaled_result[section] = {
+                        'marks': min(marks * scaling_factor, section_max),
+                        'feedback': str(result[section]['feedback'])
+                    }
                 except (ValueError, TypeError):
-                    marks = 0
+                    scaled_result[section] = {
+                        'marks': 0,
+                        'feedback': 'Error calculating marks'
+                    }
 
-                section_max = max_marks * (0.4 if section in ['introduction', 'main_body'] else 0.2)
-                scaled_result[section] = {
-                    'marks': min(marks * scaling_factor, section_max),
-                    'feedback': str(result[section].get('feedback', 'No feedback available'))
-                }
+            # Handle bonus marks (examples and diagrams)
+            for section in ['examples', 'diagrams']:
+                try:
+                    marks = float(result[section]['marks'])
+                    if marks > 0:  # Only if content is present
+                        bonus_max = max_marks * (0.2 if (section == 'diagrams' and diagrams_required) else 0.1)
+                        scaled_result[section] = {
+                            'marks': min(marks * scaling_factor, bonus_max),
+                            'feedback': str(result[section]['feedback'])
+                        }
+                    else:
+                        scaled_result[section] = {
+                            'marks': 0,
+                            'feedback': f"No {section} provided"
+                        }
+                except (ValueError, TypeError):
+                    scaled_result[section] = {
+                        'marks': 0,
+                        'feedback': 'Error calculating marks'
+                    }
 
             # Calculate total marks
             base_marks = sum(scaled_result[s]['marks'] for s in ['introduction', 'main_body', 'conclusion'])
