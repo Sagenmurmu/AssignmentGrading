@@ -18,7 +18,7 @@
         </div>
         <div class="form-group">
             <label>Role</label>
-            <select name="role" id="role" onchange="toggleTeacherCode()">
+            <select name="role" id="role" onchange="toggleCode()">
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
             </select>
@@ -31,14 +31,21 @@
             <label>Teacher Code</label>
             <input type="password" name="teacher_code">
         </div>
+        <div class="form-group" id="student_code_group">
+            <label>Student Code</label>
+            <input type="password" name="student_code">
+        </div>
         <button type="submit">Register</button>
     </form>
     <script>
-        function toggleTeacherCode() {
+        function toggleCode() {
             const role = document.getElementById('role').value;
             const teacherCodeGroup = document.getElementById('teacher_code_group');
+            const studentCodeGroup = document.getElementById('student_code_group');
             teacherCodeGroup.style.display = role === 'teacher' ? 'block' : 'none';
+            studentCodeGroup.style.display = role === 'student' ? 'block' : 'none';
         }
+        toggleCode();
     </script>
 </div>
 {% endblock %}

@@ -63,10 +63,16 @@ def allowed_file(filename):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        teacher_code = request.form['teacher_code']
+        role = request.form['role']
         password = request.form['password']
         
-        user = User.query.filter_by(teacher_code=teacher_code).first()
+        if role == 'teacher':
+            code = request.form.get('teacher_code')
+            user = User.query.filter_by(teacher_code=code, role='teacher').first()
+        else:
+            code = request.form.get('student_code')
+            user = User.query.filter_by(student_code=code, role='student').first()
+            
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             if user.role == 'teacher':
@@ -74,7 +80,7 @@ def login():
             else:
                 return redirect(url_for('home'))
         else:
-            flash('Invalid teacher code or password')
+            flash('Invalid credentials')
     return render_template('login.html')
 
 
@@ -99,8 +105,9 @@ def register():
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
         teacher_code = request.form.get('teacher_code') if role == 'teacher' else None
+        student_code = request.form.get('student_code') if role == 'student' else None
         new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], 
-                       role=role, class_name=class_name, teacher_code=teacher_code)
+                       role=role, class_name=class_name, teacher_code=teacher_code, student_code=student_code)
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))

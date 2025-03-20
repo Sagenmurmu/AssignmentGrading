@@ -16,6 +16,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), nullable=False)
     class_name = db.Column(db.String(20), nullable=True)  # e.g., "10A", "10B"
     teacher_code = db.Column(db.String(128), nullable=True)  # For teacher verification
+    student_code = db.Column(db.String(128), nullable=True)  # For student verification
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
