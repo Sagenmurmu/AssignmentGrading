@@ -13,8 +13,18 @@ from utils import extract_text_from_pdf, extract_text_from_image, analyze_with_g
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "default-secret-key")
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
+app.secret_key = os.environ.get("SESSION_SECRET")
+if not app.secret_key:
+    # Generate a secure random key if SESSION_SECRET is not set
+    import secrets
+    app.secret_key = secrets.token_hex(32)
+
+# Configure database
+database_url = os.environ.get("DATABASE_URL")
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
@@ -65,14 +75,14 @@ def login():
     if request.method == 'POST':
         role = request.form['role']
         password = request.form['password']
-        
+
         if role == 'teacher':
             code = request.form.get('teacher_code')
             user = User.query.filter_by(teacher_code=code, role='teacher').first()
         else:
             code = request.form.get('student_code')
             user = User.query.filter_by(student_code=code, role='student').first()
-            
+
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             if user.role == 'teacher':
@@ -231,24 +241,51 @@ def submit_answer(question_id):
             flash('Please provide an answer')
             return redirect(url_for('view_question', question_id=question_id))
 
-        grading_result = analyze_with_gemini(question.question_text, answer, question.max_marks)
+        # Validate Gemini API key
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logging.error("Gemini API key not found")
+            flash('System configuration error. Please contact administrator.')
+            return redirect(url_for('view_question', question_id=question_id))
 
+        # Get grading result with error handling
+        try:
+            grading_result = analyze_with_gemini(question.question_text, answer, question.max_marks)
+            if not grading_result or not isinstance(grading_result, dict):
+                logging.error(f"Invalid grading result format: {grading_result}")
+                flash('Error during grading. Please try again.')
+                return redirect(url_for('view_question', question_id=question_id))
+
+            # Validate grading result structure
+            required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams', 'total_marks']
+            if not all(field in grading_result for field in required_fields):
+                logging.error(f"Missing fields in grading result: {grading_result}")
+                flash('Error during grading. Please try again.')
+                return redirect(url_for('view_question', question_id=question_id))
+
+        except Exception as e:
+            logging.error(f"Error in analyze_with_gemini: {str(e)}")
+            flash('Error during grading. Please try again.')
+            return redirect(url_for('view_question', question_id=question_id))
+
+        # Create submission with validated data
         submission = Submission(
             answer=answer,
             question_id=question_id,
             student_id=current_user.id,
-            introduction_marks=grading_result['introduction']['marks'],
-            main_body_marks=grading_result['main_body']['marks'],
-            conclusion_marks=grading_result['conclusion']['marks'],
-            examples_marks=grading_result['examples']['marks'],
-            diagrams_marks=grading_result['diagrams']['marks'],
-            total_marks=grading_result['total_marks'],
-            introduction_feedback=grading_result['introduction']['feedback'],
-            main_body_feedback=grading_result['main_body']['feedback'],
-            conclusion_feedback=grading_result['conclusion']['feedback'],
-            examples_feedback=grading_result['examples']['feedback'],
-            diagrams_feedback=grading_result['diagrams']['feedback']
+            introduction_marks=float(grading_result['introduction']['marks']),
+            main_body_marks=float(grading_result['main_body']['marks']),
+            conclusion_marks=float(grading_result['conclusion']['marks']),
+            examples_marks=float(grading_result['examples']['marks']),
+            diagrams_marks=float(grading_result['diagrams']['marks']),
+            total_marks=float(grading_result['total_marks']),
+            introduction_feedback=str(grading_result['introduction']['feedback']),
+            main_body_feedback=str(grading_result['main_body']['feedback']),
+            conclusion_feedback=str(grading_result['conclusion']['feedback']),
+            examples_feedback=str(grading_result['examples']['feedback']),
+            diagrams_feedback=str(grading_result['diagrams']['feedback'])
         )
+
         db.session.add(submission)
         db.session.commit()
 
@@ -256,8 +293,10 @@ def submit_answer(question_id):
                            result=grading_result,
                            submission_id=submission.id,
                            max_marks=question.max_marks)
+
     except Exception as e:
         logging.error(f"Error submitting answer: {str(e)}")
+        db.session.rollback()
         flash('Error during grading. Please try again.')
         return redirect(url_for('view_question', question_id=question_id))
 

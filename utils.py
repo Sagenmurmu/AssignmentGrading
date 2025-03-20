@@ -60,7 +60,7 @@ def extract_text_from_pdf(pdf_path):
         raise
 
 def analyze_with_gemini(question, answer, max_marks, mode='grade'):
-    """Analyze text using Gemini AI with improved prompting."""
+    """Analyze text using Gemini AI with improved error handling."""
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -93,36 +93,45 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
             Important: Grade out of 10 marks first, scaling will be applied later.
             """
 
-            response = model.generate_content(prompt)
-            result = response.text
+            # Add retry mechanism for API calls
+            max_retries = 3
+            retry_count = 0
+
+            while retry_count < max_retries:
+                try:
+                    response = model.generate_content(prompt)
+                    if not response or not response.text:
+                        raise ValueError("Empty response from Gemini API")
+
+                    result = response.text
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count == max_retries:
+                        logging.error(f"Failed to get response from Gemini API after {max_retries} attempts: {str(e)}")
+                        raise
+                    logging.warning(f"Retry {retry_count}/{max_retries} for Gemini API call")
 
             try:
                 # Parse the JSON response
                 raw_result = json.loads(result)
 
-                # Calculate scaled marks
-                scaled_result = {
-                    'introduction': {
-                        'marks': min(raw_result['introduction']['marks'] * scaling_factor, max_marks * 0.4),
-                        'feedback': raw_result['introduction']['feedback']
-                    },
-                    'main_body': {
-                        'marks': min(raw_result['main_body']['marks'] * scaling_factor, max_marks * 0.4),
-                        'feedback': raw_result['main_body']['feedback']
-                    },
-                    'conclusion': {
-                        'marks': min(raw_result['conclusion']['marks'] * scaling_factor, max_marks * 0.2),
-                        'feedback': raw_result['conclusion']['feedback']
-                    },
-                    'examples': {
-                        'marks': min(raw_result['examples']['marks'] * scaling_factor, max_marks * 0.2),
-                        'feedback': raw_result['examples']['feedback']
-                    },
-                    'diagrams': {
-                        'marks': min(raw_result['diagrams']['marks'] * scaling_factor, max_marks * 0.2),
-                        'feedback': raw_result['diagrams']['feedback']
+                # Validate required fields
+                required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams']
+                if not all(field in raw_result for field in required_fields):
+                    raise ValueError(f"Missing required fields in API response: {raw_result}")
+
+                # Calculate scaled marks with validation
+                scaled_result = {}
+                for section in required_fields:
+                    if not isinstance(raw_result[section], dict):
+                        raw_result[section] = {'marks': 0, 'feedback': 'No feedback available'}
+
+                    section_max = max_marks * (0.4 if section in ['introduction', 'main_body'] else 0.2)
+                    scaled_result[section] = {
+                        'marks': min(float(raw_result[section].get('marks', 0)) * scaling_factor, section_max),
+                        'feedback': str(raw_result[section].get('feedback', 'No feedback available'))
                     }
-                }
 
                 # Calculate total marks (base + bonus, capped at max_marks)
                 base_marks = (scaled_result['introduction']['marks'] + 
@@ -135,22 +144,13 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
                 total_marks = min(base_marks + bonus_marks, max_marks)
 
                 scaled_result['total_marks'] = total_marks
-                scaled_result['ai_detection_score'] = raw_result.get('ai_detection_score', 0)
+                scaled_result['ai_detection_score'] = float(raw_result.get('ai_detection_score', 0))
 
                 return scaled_result
 
-            except json.JSONDecodeError:
-                # Fallback structure with proper scaling
-                base_marks = max_marks * 0.8  # 80% of max marks as default
-                return {
-                    'introduction': {'marks': max_marks * 0.32, 'feedback': 'Clear introduction with good context'},
-                    'main_body': {'marks': max_marks * 0.32, 'feedback': 'Well-structured content with good depth'},
-                    'conclusion': {'marks': max_marks * 0.16, 'feedback': 'Effective summary and closure'},
-                    'examples': {'marks': 0, 'feedback': 'No examples provided'},
-                    'diagrams': {'marks': 0, 'feedback': 'No diagrams included'},
-                    'total_marks': base_marks,
-                    'ai_detection_score': 0.2
-                }
+            except json.JSONDecodeError as e:
+                logging.error(f"Error parsing Gemini API response: {str(e)}")
+                raise ValueError("Invalid response format from Gemini API")
 
         elif mode == 'review':
             prompt = f"""
@@ -161,8 +161,8 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
             Focus on:
             1. Strengths and what was done well
             2. Areas needing improvement
-            3. Specific suggestions for each section (Introduction - 40%, Main Body - 40%, Conclusion - 20%)
-            4. How to improve examples and diagrams for bonus marks
+            3. Specific suggestions for each section
+            4. How to improve examples and diagrams
             5. Writing style and clarity
             6. Critical thinking and analysis
 
@@ -170,7 +170,7 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
             """
 
             response = model.generate_content(prompt)
-            return response.text
+            return response.text if response and response.text else "No feedback available"
 
     except Exception as e:
         logging.error(f"Error in Gemini AI analysis: {str(e)}")
