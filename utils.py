@@ -19,17 +19,21 @@ def clean_text(text):
 def extract_text_from_image(image_path):
     """Extract text from image using Gemini AI's vision capabilities."""
     try:
-        # Initialize Gemini Pro Vision model
-        model = genai.GenerativeModel('gemini-pro-vision')
+        # Initialize Gemini 1.5 Flash model
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Open and prepare the image
         image = Image.open(image_path)
 
         # Create a prompt for text extraction
         prompt = """
-        Please extract all text from this image. 
-        Format it in a clear, readable way with proper paragraphs and punctuation.
-        Preserve the original structure and meaning of the text.
+        Extract all text from this image.
+        Requirements:
+        1. Maintain original formatting and structure
+        2. Preserve all text exactly as shown
+        3. Keep paragraphs separate
+        4. Include any headers or titles
+        5. Maintain any bullet points or numbering
         """
 
         # Generate content from image
@@ -58,7 +62,7 @@ def extract_text_from_pdf(pdf_path):
 def analyze_with_gemini(question, answer, max_marks, mode='grade'):
     """Analyze text using Gemini AI with improved prompting."""
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if mode == 'grade':
             prompt = f"""
