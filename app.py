@@ -236,7 +236,7 @@ def submit_answer(question_id):
         submission = Submission(
             answer=answer,
             question_id=question_id,
-            user_id=current_user.id,
+            student_id=current_user.id,
             introduction_marks=grading_result['introduction']['marks'],
             main_body_marks=grading_result['main_body']['marks'],
             conclusion_marks=grading_result['conclusion']['marks'],
