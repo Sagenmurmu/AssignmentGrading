@@ -1,6 +1,7 @@
 import os
 import logging
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import google.generativeai as genai
@@ -193,11 +194,11 @@ def view_question(question_id):
 @app.route('/extract', methods=['POST'])
 def extract_text():
     if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file selected'})
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
 
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'})
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
@@ -210,15 +211,15 @@ def extract_text():
             else:
                 text = extract_text_from_image(filepath)
 
-            return jsonify({'success': True, 'text': text})
+            return jsonify({'success': True, 'text': text}), 200
         except Exception as e:
             logging.error(f"Error extracting text: {str(e)}")
-            return jsonify({'success': False, 'error': str(e)})
+            return jsonify({'success': False, 'error': str(e)}), 500
         finally:
             if os.path.exists(filepath):
                 os.remove(filepath)
 
-    return jsonify({'success': False, 'error': 'Invalid file type'})
+    return jsonify({'success': False, 'error': 'Invalid file type'}), 400
 
 @app.route('/submit/<int:question_id>', methods=['POST'])
 @login_required
