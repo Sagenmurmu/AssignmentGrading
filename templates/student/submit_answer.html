@@ -27,6 +27,21 @@
                     </div>
                 </div>
 
+                {% if submission %}
+                <!-- Show submission details and review button -->
+                <div class="alert alert-success">
+                    <h4 class="alert-heading">Submission Complete!</h4>
+                    <p>Your answer has been submitted and graded.</p>
+                    <hr>
+                    <p class="mb-0">Total Score: {{ submission.total_marks }}/{{ question.max_marks }}</p>
+                </div>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('review', submission_id=submission.id) }}" class="btn btn-primary">
+                        <i class="bi bi-journal-text"></i> View Detailed Review
+                    </a>
+                </div>
+                {% else %}
+                <!-- Show submission form -->
                 <form id="submission-form" action="{{ url_for('submit_answer', question_id=question.id) }}" method="POST">
                     <div class="mb-3">
                         <label class="form-label">Upload Answer (PDF or Image)</label>
@@ -62,6 +77,7 @@
                         </button>
                     </div>
                 </form>
+                {% endif %}
             </div>
         </div>
     </div>

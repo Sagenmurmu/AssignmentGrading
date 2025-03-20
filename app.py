@@ -184,7 +184,16 @@ def view_question(question_id):
         if question.teacher.class_name != current_user.class_name:
             flash("You are not authorized to view this question.")
             return redirect(url_for('home'))
-        return render_template('student/submit_answer.html', question=question)
+
+        # Check if student has already submitted an answer
+        existing_submission = Submission.query.filter_by(
+            question_id=question_id,
+            student_id=current_user.id
+        ).first()
+
+        return render_template('student/submit_answer.html', 
+                             question=question,
+                             submission=existing_submission)
     except Exception as e:
         logging.error(f"Error viewing question {question_id}: {str(e)}")
         flash('Question not found')
@@ -341,17 +350,23 @@ def review(submission_id):
     try:
         submission = Submission.query.get_or_404(submission_id)
         question = submission.question
-        if current_user.role != 'teacher' or question.teacher_id != current_user.id:
+
+        # Allow both teachers and students who own the submission to view it
+        if (current_user.role == 'teacher' and question.teacher_id == current_user.id) or \
+           (current_user.role == 'student' and submission.student_id == current_user.id):
+            review_feedback = analyze_with_gemini(
+                question.question_text,
+                submission.answer,
+                question.max_marks,
+                mode='review'
+            )
+            return render_template('review.html', 
+                                feedback=review_feedback,
+                                submission=submission,
+                                question=question)
+        else:
             flash("You are not authorized to review this submission.")
             return redirect(url_for('home'))
-
-        review_feedback = analyze_with_gemini(
-            question.question_text,
-            submission.answer,
-            question.max_marks,
-            mode='review'
-        )
-        return render_template('review.html', feedback=review_feedback)
     except Exception as e:
         logging.error(f"Error generating review: {str(e)}")
         flash('Error generating review. Please try again.')
