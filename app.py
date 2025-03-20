@@ -32,6 +32,7 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 
 with app.app_context():
     db.create_all()
+    logging.info("Database tables created successfully")
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
