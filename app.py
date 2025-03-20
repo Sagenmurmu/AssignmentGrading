@@ -5,7 +5,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from werkzeug.security import generate_password_hash, check_password_hash
 import google.generativeai as genai
 from datetime import datetime
-from models import db, User, Question, Submission # Updated import to include User model
+from models import db, User, Question, Submission
 from utils import extract_text_from_pdf, extract_text_from_image, analyze_with_gemini
 
 # Configure logging
@@ -30,7 +30,7 @@ db.init_app(app)
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login' # Redirect to login page if not logged in
+login_manager.login_view = 'login'
 
 # Load user from database
 @login_manager.user_loader
@@ -42,10 +42,11 @@ def load_user(user_id):
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-# Database initialization with error handling (unchanged)
+# Database initialization with error handling
 with app.app_context():
     try:
         db.create_all()
+        db.session.commit()
         logging.info("Database tables created successfully")
     except Exception as e:
         logging.error(f"Error creating database tables: {str(e)}")
@@ -64,9 +65,9 @@ def login():
         username = request.form['username']
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
+        if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            return redirect(url_for('dashboard')) # Redirect to appropriate dashboard
+            return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password')
     return render_template('login.html')
@@ -84,10 +85,11 @@ def register():
         username = request.form['username']
         password = request.form['password']
         role = request.form['role']
-        class_name = request.form.get('class') # Get class if applicable
+        class_name = request.form.get('class')
+        teacher_code = request.form.get('teacher_code') # Added teacher_code
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], role=role, class_name=class_name)
+        new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], role=role, class_name=class_name, teacher_code=teacher_code) # Added teacher_code
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
@@ -99,10 +101,10 @@ def register():
 @login_required
 def teacher_dashboard():
     if current_user.role != 'teacher':
-        return redirect(url_for('login')) #or unauthorized page
+        return redirect(url_for('login'))
 
     try:
-        questions = Question.query.filter_by(teacher_id=current_user.id).order_by(Question.created_at.desc()).all() #Filter questions by teacher
+        questions = Question.query.filter_by(teacher_id=current_user.id).order_by(Question.created_at.desc()).all()
         return render_template('teacher/dashboard.html', questions=questions)
     except Exception as e:
         logging.error(f"Error in teacher dashboard: {str(e)}")
@@ -124,7 +126,7 @@ def create_question():
                 deadline=datetime.fromisoformat(request.form['deadline']),
                 requires_examples=bool(request.form.get('requires_examples')),
                 requires_diagrams=bool(request.form.get('requires_diagrams')),
-                teacher_id=current_user.id # Add teacher ID to question
+                teacher_id=current_user.id
             )
             db.session.add(question)
             db.session.commit()
@@ -160,7 +162,6 @@ def view_question(question_id):
 
     try:
         question = Question.query.get_or_404(question_id)
-        # Add check to ensure student is in the correct class
         if question.teacher.class_name != current_user.class_name:
             flash("You are not authorized to view this question.")
             return redirect(url_for('home'))
@@ -170,7 +171,7 @@ def view_question(question_id):
         flash('Question not found')
         return redirect(url_for('home'))
 
-#Extract and Submit routes (unchanged)
+#Extract and Submit routes
 @app.route('/extract', methods=['POST'])
 def extract_text():
     if 'file' not in request.files:
@@ -217,7 +218,7 @@ def submit_answer(question_id):
         submission = Submission(
             answer=answer,
             question_id=question_id,
-            student_id=current_user.id, # Add student ID to submission
+            student_id=current_user.id,
             introduction_marks=grading_result['introduction']['marks'],
             main_body_marks=grading_result['main_body']['marks'],
             conclusion_marks=grading_result['conclusion']['marks'],
@@ -249,7 +250,6 @@ def review(submission_id):
     try:
         submission = Submission.query.get_or_404(submission_id)
         question = submission.question
-        # Add authorization check for teachers only
         if current_user.role != 'teacher' or question.teacher_id != current_user.id:
             flash("You are not authorized to review this submission.")
             return redirect(url_for('home'))
