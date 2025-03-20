@@ -1,8 +1,20 @@
+
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import TEXT
+from flask_login import UserMixin
 
 db = SQLAlchemy()
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
+    role = db.Column(db.String(20), nullable=False)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
 
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -13,8 +25,6 @@ class Question(db.Model):
     requires_examples = db.Column(db.Boolean, default=False)
     requires_diagrams = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # Relationships
     submissions = db.relationship('Submission', backref='question', lazy='dynamic')
 
     def __repr__(self):
@@ -36,22 +46,17 @@ class Submission(db.Model):
     answer = db.Column(TEXT, nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
     submission_date = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # Section marks and feedback
     introduction_marks = db.Column(db.Float)
     main_body_marks = db.Column(db.Float)
     conclusion_marks = db.Column(db.Float)
     examples_marks = db.Column(db.Float)
     diagrams_marks = db.Column(db.Float)
     total_marks = db.Column(db.Float)
-
     introduction_feedback = db.Column(TEXT)
     main_body_feedback = db.Column(TEXT)
     conclusion_feedback = db.Column(TEXT)
     examples_feedback = db.Column(TEXT)
     diagrams_feedback = db.Column(TEXT)
-
-    # AI detection and plagiarism
     ai_detection_score = db.Column(db.Float)
     plagiarism_score = db.Column(db.Float)
     plagiarism_matches = db.Column(TEXT)
