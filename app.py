@@ -26,6 +26,12 @@ genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 # Initialize database
 db.init_app(app)
 
+# Drop and recreate all tables
+with app.app_context():
+    db.drop_all()
+    db.create_all()
+    logging.info("Database tables recreated successfully")
+
 # Create upload folder if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])

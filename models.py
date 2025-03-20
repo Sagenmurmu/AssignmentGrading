@@ -42,6 +42,7 @@ class Question(db.Model):
         }
 
 class Submission(db.Model):
+    __tablename__ = 'submissions'
     id = db.Column(db.Integer, primary_key=True)
     answer = db.Column(TEXT, nullable=False)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False)
