@@ -1,19 +1,18 @@
 import os
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from werkzeug.utils import secure_filename
 import google.generativeai as genai
-from flask_login import LoginManager, current_user
-from models import db, User, Submission
+from datetime import datetime
+from models import db, Question, Submission
 from utils import extract_text_from_pdf, extract_text_from_image, analyze_with_gemini
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "your-secret-key")
+app.secret_key = os.environ.get("SESSION_SECRET", "default-secret-key")  # Set default secret key
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
@@ -27,47 +26,86 @@ genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 # Initialize database
 db.init_app(app)
 
-# Initialize Flask-Login
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
-
 # Create upload folder if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
+# Initialize database tables with error logging
 with app.app_context():
-    db.create_all()
-    logging.info("Database tables created successfully")
-
-# User loader callback for Flask-Login
-@login_manager.user_loader
-def load_user(id):
-    return User.query.get(int(id))
-
-# Register blueprints
-from routes.auth import auth
-app.register_blueprint(auth, url_prefix='/auth')
+    try:
+        db.create_all()
+        logging.info("Database tables created successfully")
+    except Exception as e:
+        logging.error(f"Error creating database tables: {str(e)}")
+        raise
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# Teacher routes
+@app.route('/teacher')
+def teacher_dashboard():
+    try:
+        questions = Question.query.order_by(Question.created_at.desc()).all()
+        return render_template('teacher/dashboard.html', questions=questions)
+    except Exception as e:
+        logging.error(f"Error in teacher dashboard: {str(e)}")
+        flash('Error loading questions')
+        return redirect(url_for('home'))
+
+@app.route('/teacher/question/new', methods=['GET', 'POST'])
+def create_question():
+    if request.method == 'POST':
+        try:
+            question = Question(
+                title=request.form['title'],
+                question_text=request.form['question_text'],
+                max_marks=int(request.form['max_marks']),
+                deadline=datetime.fromisoformat(request.form['deadline']),
+                requires_examples=bool(request.form.get('requires_examples')),
+                requires_diagrams=bool(request.form.get('requires_diagrams'))
+            )
+            db.session.add(question)
+            db.session.commit()
+            flash('Question created successfully!')
+            return redirect(url_for('teacher_dashboard'))
+        except Exception as e:
+            logging.error(f"Error creating question: {str(e)}")
+            flash('Error creating question')
+            return redirect(url_for('create_question'))
+    return render_template('teacher/create_question.html')
+
+# Student routes
 @app.route('/')
 def home():
-    return render_template('home.html')
+    try:
+        questions = Question.query.filter(Question.deadline > datetime.utcnow()).all()
+        return render_template('student/questions.html', questions=questions)
+    except Exception as e:
+        logging.error(f"Error loading questions: {str(e)}")
+        flash('Error loading questions')
+        return render_template('student/questions.html', questions=[])
+
+@app.route('/question/<int:question_id>')
+def view_question(question_id):
+    try:
+        question = Question.query.get_or_404(question_id)
+        return render_template('student/submit_answer.html', question=question)
+    except Exception as e:
+        logging.error(f"Error viewing question {question_id}: {str(e)}")
+        flash('Question not found')
+        return redirect(url_for('home'))
 
 @app.route('/extract', methods=['POST'])
 def extract_text():
     if 'file' not in request.files:
-        flash('No file selected')
-        return redirect(url_for('home'))
+        return jsonify({'success': False, 'error': 'No file selected'})
 
     file = request.files['file']
     if file.filename == '':
-        flash('No file selected')
-        return redirect(url_for('home'))
+        return jsonify({'success': False, 'error': 'No file selected'})
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
@@ -80,65 +118,67 @@ def extract_text():
             else:
                 text = extract_text_from_image(filepath)
 
-            return {'success': True, 'text': text}
+            return jsonify({'success': True, 'text': text})
         except Exception as e:
             logging.error(f"Error extracting text: {str(e)}")
-            return {'success': False, 'error': str(e)}
+            return jsonify({'success': False, 'error': str(e)})
+        finally:
+            # Clean up the uploaded file
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
-    return {'success': False, 'error': 'Invalid file type'}
+    return jsonify({'success': False, 'error': 'Invalid file type'})
 
-@app.route('/grade', methods=['POST'])
-def grade():
-    if not current_user.is_authenticated:
-        flash('Please login to submit assignments')
-        return redirect(url_for('auth.login'))
-
-    question = request.form.get('question')
-    answer = request.form.get('answer')
-    max_marks = int(request.form.get('max_marks', 10))
-
-    if not question or not answer:
-        flash('Please provide both question and answer')
-        return redirect(url_for('home'))
-
+@app.route('/submit/<int:question_id>', methods=['POST'])
+def submit_answer(question_id):
     try:
-        grading_result = analyze_with_gemini(question, answer, max_marks)
+        question = Question.query.get_or_404(question_id)
+        answer = request.form.get('answer')
 
-        # Store submission in database
+        if not answer:
+            flash('Please provide an answer')
+            return redirect(url_for('view_question', question_id=question_id))
+
+        grading_result = analyze_with_gemini(question.question_text, answer, question.max_marks)
+
         submission = Submission(
-            question=question,
             answer=answer,
-            max_marks=max_marks,
-            user_id=current_user.id,
+            question_id=question_id,
             introduction_marks=grading_result['introduction']['marks'],
             main_body_marks=grading_result['main_body']['marks'],
             conclusion_marks=grading_result['conclusion']['marks'],
             examples_marks=grading_result['examples']['marks'],
             diagrams_marks=grading_result['diagrams']['marks'],
             total_marks=grading_result['total_marks'],
-            ai_detection_score=grading_result['ai_detection_score']
+            ai_detection_score=grading_result['ai_detection_score'],
+            introduction_feedback=grading_result['introduction']['feedback'],
+            main_body_feedback=grading_result['main_body']['feedback'],
+            conclusion_feedback=grading_result['conclusion']['feedback'],
+            examples_feedback=grading_result['examples']['feedback'],
+            diagrams_feedback=grading_result['diagrams']['feedback']
         )
         db.session.add(submission)
         db.session.commit()
 
         return render_template('grading.html', 
-                            result=grading_result, 
-                            submission_id=submission.id,
-                            max_marks=max_marks)
+                           result=grading_result, 
+                           submission_id=submission.id,
+                           max_marks=question.max_marks)
     except Exception as e:
-        logging.error(f"Error during grading: {str(e)}")
+        logging.error(f"Error submitting answer: {str(e)}")
         flash('Error during grading. Please try again.')
-        return redirect(url_for('home'))
+        return redirect(url_for('view_question', question_id=question_id))
 
 @app.route('/review/<int:submission_id>')
 def review(submission_id):
-    submission = Submission.query.get_or_404(submission_id)
-
     try:
+        submission = Submission.query.get_or_404(submission_id)
+        question = submission.question
+
         review_feedback = analyze_with_gemini(
-            submission.question,
+            question.question_text,
             submission.answer,
-            submission.max_marks,
+            question.max_marks,
             mode='review'
         )
         return render_template('review.html', feedback=review_feedback)
@@ -146,3 +186,6 @@ def review(submission_id):
         logging.error(f"Error generating review: {str(e)}")
         flash('Error generating review. Please try again.')
         return redirect(url_for('home'))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

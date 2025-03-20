@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="card-title h4">{{ question.title }}</h2>
+            </div>
+            <div class="card-body">
+                <div class="question-details mb-4">
+                    <h3 class="h5">Question:</h3>
+                    <p class="question-text">{{ question.question_text }}</p>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div>
+                            <span class="badge bg-primary">{{ question.max_marks }} marks</span>
+                            {% if question.requires_examples %}
+                            <span class="badge bg-info ms-2">Examples Required</span>
+                            {% endif %}
+                            {% if question.requires_diagrams %}
+                            <span class="badge bg-info ms-2">Diagrams Required</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted">
+                            Deadline: {{ question.deadline.strftime('%Y-%m-%d %H:%M') }}
+                        </div>
+                    </div>
+                </div>
+
+                <form id="submission-form" action="{{ url_for('submit_answer', question_id=question.id) }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Upload Answer (PDF or Image)</label>
+                        <div class="drop-zone" id="drop-zone">
+                            <div class="drop-zone-prompt">
+                                <i class="bi bi-cloud-upload"></i>
+                                <p>Drag and drop files here or click to upload</p>
+                                <p class="small text-muted">Supported formats: PDF, PNG, JPG</p>
+                            </div>
+                            <input type="file" id="file-upload" class="drop-zone-input" accept=".pdf,.png,.jpg,.jpeg">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="answer" class="form-label">Your Answer</label>
+                        <textarea class="form-control" id="answer" name="answer" rows="10" required></textarea>
+                        <div class="form-text">
+                            {% if question.requires_examples %}
+                            <div><i class="bi bi-info-circle"></i> Remember to include examples in your answer.</div>
+                            {% endif %}
+                            {% if question.requires_diagrams %}
+                            <div><i class="bi bi-info-circle"></i> Remember to include diagrams in your answer.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" id="extract-text" class="btn btn-secondary">
+                            <i class="bi bi-eye"></i> Extract Text
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send"></i> Submit Answer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

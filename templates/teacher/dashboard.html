@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Teacher Dashboard</h2>
+            <a href="{{ url_for('create_question') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Create New Question
+            </a>
+        </div>
+
+        {% for question in questions %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title h5 mb-0">{{ question.title }}</h3>
+                <span class="badge bg-primary">{{ question.max_marks }} marks</span>
+            </div>
+            <div class="card-body">
+                <p class="card-text">{{ question.question_text[:200] }}...</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Requirements:</strong>
+                        <div>
+                            {% if question.requires_examples %}
+                            <span class="badge bg-info me-2">Examples Required</span>
+                            {% endif %}
+                            {% if question.requires_diagrams %}
+                            <span class="badge bg-info">Diagrams Required</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div>Created: {{ question.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                        <div>Deadline: {{ question.deadline.strftime('%Y-%m-%d %H:%M') }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted">Submissions: {{ question.submissions.count() }}</span>
+                </div>
+                <div>
+                    <a href="#" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-bar-chart"></i> View Statistics
+                    </a>
+                    <a href="#" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-eye"></i> View Submissions
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No questions created yet.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
