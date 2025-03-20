@@ -10,41 +10,54 @@ logging.basicConfig(level=logging.DEBUG)
 
 def clean_text(text):
     """Clean and normalize extracted text."""
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-    # Normalize line breaks
-    text = re.sub(r'[\r\n]+', '\n', text)
-    return text.strip()
+    try:
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text)
+        # Normalize line breaks
+        text = re.sub(r'[\r\n]+', '\n', text)
+        return text.strip()
+    except Exception as e:
+        logging.error(f"Error cleaning text: {str(e)}")
+        return text if text else ""
 
 def extract_text_from_image(image_path):
     """Extract text from image using Gemini AI's vision capabilities."""
     try:
         # Initialize Gemini 1.5 Flash model
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("Gemini API key not found")
+
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Open and prepare the image
-        image = Image.open(image_path)
+        with Image.open(image_path) as image:
+            # Create a prompt for text extraction
+            prompt = """
+            Extract all text from this image.
+            Requirements:
+            1. Maintain original formatting and structure
+            2. Preserve all text exactly as shown
+            3. Keep paragraphs separate
+            4. Include any headers or titles
+            5. Maintain any bullet points or numbering
+            """
 
-        # Create a prompt for text extraction
-        prompt = """
-        Extract all text from this image.
-        Requirements:
-        1. Maintain original formatting and structure
-        2. Preserve all text exactly as shown
-        3. Keep paragraphs separate
-        4. Include any headers or titles
-        5. Maintain any bullet points or numbering
-        """
+            # Generate content from image
+            response = model.generate_content([prompt, image])
+            if not response or not response.text:
+                raise ValueError("Empty response from Gemini API")
 
-        # Generate content from image
-        response = model.generate_content([prompt, image])
-        extracted_text = response.text
+            extracted_text = response.text
+            cleaned_text = clean_text(extracted_text)
 
-        # Clean the extracted text
-        cleaned_text = clean_text(extracted_text)
+            if not cleaned_text:
+                raise ValueError("No text was extracted from the image")
 
-        logging.info(f"Successfully extracted text from image: {image_path}")
-        return cleaned_text
+            logging.info(f"Successfully extracted text from image: {image_path}")
+            return cleaned_text
+
     except Exception as e:
         logging.error(f"Error extracting text from image {image_path}: {str(e)}")
         raise
@@ -52,8 +65,7 @@ def extract_text_from_image(image_path):
 def extract_text_from_pdf(pdf_path):
     """Extract text from PDF by converting pages to images and using Gemini Vision."""
     try:
-        # Convert PDF to images and extract text from each page
-        # For now, we'll return a message suggesting direct image upload
+        # For now, return a message suggesting direct image upload
         return "PDF extraction is being updated. Please upload images directly for better results."
     except Exception as e:
         logging.error(f"Error extracting text from PDF {pdf_path}: {str(e)}")
@@ -62,6 +74,11 @@ def extract_text_from_pdf(pdf_path):
 def analyze_with_gemini(question, answer, max_marks, mode='grade'):
     """Analyze text using Gemini AI with improved error handling."""
     try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("Gemini API key not found")
+
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
 
         if mode == 'grade':
@@ -83,19 +100,21 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
             - Examples: Award up to 2 marks (20%) if explicitly required, or 1 mark (10%) if provided voluntarily
             - Diagrams: Award up to 2 marks (20%) if explicitly required, or 1 mark (10%) if provided voluntarily
 
-            Please provide:
-            1. Detailed feedback for each section
-            2. Clear marks breakdown
-            3. Whether examples/diagrams were required or voluntarily provided
-            4. AI detection score (0-1)
-
-            Format the response as a JSON object with sections and their marks.
-            Important: Grade out of 10 marks first, scaling will be applied later.
+            Provide the response in the following JSON format:
+            {
+                "introduction": {"marks": 0, "feedback": ""},
+                "main_body": {"marks": 0, "feedback": ""},
+                "conclusion": {"marks": 0, "feedback": ""},
+                "examples": {"marks": 0, "feedback": ""},
+                "diagrams": {"marks": 0, "feedback": ""},
+                "ai_detection_score": 0
+            }
             """
 
             # Add retry mechanism for API calls
             max_retries = 3
             retry_count = 0
+            result = None
 
             while retry_count < max_retries:
                 try:
@@ -103,54 +122,51 @@ def analyze_with_gemini(question, answer, max_marks, mode='grade'):
                     if not response or not response.text:
                         raise ValueError("Empty response from Gemini API")
 
-                    result = response.text
-                    break
+                    # Try to parse the response as JSON
+                    try:
+                        result = json.loads(response.text)
+                        # Validate the response structure
+                        required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams']
+                        if all(field in result for field in required_fields):
+                            break
+                        else:
+                            raise ValueError("Invalid response structure")
+                    except json.JSONDecodeError:
+                        raise ValueError("Invalid JSON response")
+
                 except Exception as e:
                     retry_count += 1
                     if retry_count == max_retries:
-                        logging.error(f"Failed to get response from Gemini API after {max_retries} attempts: {str(e)}")
+                        logging.error(f"Failed to get valid response after {max_retries} attempts: {str(e)}")
                         raise
                     logging.warning(f"Retry {retry_count}/{max_retries} for Gemini API call")
 
-            try:
-                # Parse the JSON response
-                raw_result = json.loads(result)
+            # Calculate scaled marks with validation
+            scaled_result = {}
+            for section in ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams']:
+                if not isinstance(result[section], dict):
+                    result[section] = {'marks': 0, 'feedback': 'No feedback available'}
 
-                # Validate required fields
-                required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams']
-                if not all(field in raw_result for field in required_fields):
-                    raise ValueError(f"Missing required fields in API response: {raw_result}")
+                section_max = max_marks * (0.4 if section in ['introduction', 'main_body'] else 0.2)
+                scaled_result[section] = {
+                    'marks': min(float(result[section].get('marks', 0)) * scaling_factor, section_max),
+                    'feedback': str(result[section].get('feedback', 'No feedback available'))
+                }
 
-                # Calculate scaled marks with validation
-                scaled_result = {}
-                for section in required_fields:
-                    if not isinstance(raw_result[section], dict):
-                        raw_result[section] = {'marks': 0, 'feedback': 'No feedback available'}
+            # Calculate total marks
+            base_marks = (scaled_result['introduction']['marks'] + 
+                        scaled_result['main_body']['marks'] + 
+                        scaled_result['conclusion']['marks'])
 
-                    section_max = max_marks * (0.4 if section in ['introduction', 'main_body'] else 0.2)
-                    scaled_result[section] = {
-                        'marks': min(float(raw_result[section].get('marks', 0)) * scaling_factor, section_max),
-                        'feedback': str(raw_result[section].get('feedback', 'No feedback available'))
-                    }
+            bonus_marks = (scaled_result['examples']['marks'] + 
+                         scaled_result['diagrams']['marks'])
 
-                # Calculate total marks (base + bonus, capped at max_marks)
-                base_marks = (scaled_result['introduction']['marks'] + 
-                            scaled_result['main_body']['marks'] + 
-                            scaled_result['conclusion']['marks'])
+            total_marks = min(base_marks + bonus_marks, max_marks)
 
-                bonus_marks = (scaled_result['examples']['marks'] + 
-                             scaled_result['diagrams']['marks'])
+            scaled_result['total_marks'] = total_marks
+            scaled_result['ai_detection_score'] = float(result.get('ai_detection_score', 0))
 
-                total_marks = min(base_marks + bonus_marks, max_marks)
-
-                scaled_result['total_marks'] = total_marks
-                scaled_result['ai_detection_score'] = float(raw_result.get('ai_detection_score', 0))
-
-                return scaled_result
-
-            except json.JSONDecodeError as e:
-                logging.error(f"Error parsing Gemini API response: {str(e)}")
-                raise ValueError("Invalid response format from Gemini API")
+            return scaled_result
 
         elif mode == 'review':
             prompt = f"""
