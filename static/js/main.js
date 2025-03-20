@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const extractButton = document.getElementById('extract-text');
     const answerTextarea = document.getElementById('answer');
 
+    // Add click handler for the drop zone
+    dropZone.addEventListener('click', () => {
+        fileInput.click(); // Trigger file input when drop zone is clicked
+    });
+
     // Drag and drop functionality
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
@@ -75,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 answerTextarea.value = result.text;
             } else {
