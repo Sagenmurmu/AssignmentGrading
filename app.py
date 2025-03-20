@@ -237,8 +237,17 @@ def submit_answer(question_id):
             answer=answer,
             question_id=question_id,
             user_id=current_user.id,
-            **{k: v['marks'] if isinstance(v, dict) else v for k, v in grading_result.items() if k != 'plagiarism_score' and k != 'plagiarism_matches'},
-            **{k+'_feedback': v['feedback'] for k, v in grading_result.items() if isinstance(v, dict) and 'feedback' in v}
+            introduction_marks=grading_result['introduction']['marks'],
+            main_body_marks=grading_result['main_body']['marks'],
+            conclusion_marks=grading_result['conclusion']['marks'],
+            examples_marks=grading_result['examples']['marks'],
+            diagrams_marks=grading_result['diagrams']['marks'],
+            total_marks=grading_result['total_marks'],
+            introduction_feedback=grading_result['introduction']['feedback'],
+            main_body_feedback=grading_result['main_body']['feedback'],
+            conclusion_feedback=grading_result['conclusion']['feedback'],
+            examples_feedback=grading_result['examples']['feedback'],
+            diagrams_feedback=grading_result['diagrams']['feedback']
         )
         db.session.add(submission)
         db.session.commit()
