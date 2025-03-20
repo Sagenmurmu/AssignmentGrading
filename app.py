@@ -97,14 +97,14 @@ def register():
         username = request.form['username']
         password = request.form['password']
         role = request.form['role']
-        class_name = request.form.get('class') # Get class if applicable
+        class_name = request.form.get('class_name')
 
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already exists. Please choose another.')
             return redirect(url_for('register'))
 
-        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+        hashed_password = generate_password_hash(password)
         teacher_code = request.form.get('teacher_code') if role == 'teacher' else None
         student_code = request.form.get('student_code') if role == 'student' else None
         new_user = User(username=username, password_hash=hashed_password, email=request.form['email'], 
@@ -292,7 +292,7 @@ def submit_answer(question_id):
                 flash('Error during grading. Please try again.')
                 return redirect(url_for('view_question', question_id=question_id))
 
-            # Validate grading result structure
+            # Validate required fields
             required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams', 'total_marks']
             if not all(field in grading_result for field in required_fields):
                 logging.error(f"Missing fields in grading result: {grading_result}")
