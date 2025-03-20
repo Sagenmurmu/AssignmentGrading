@@ -35,6 +35,8 @@ class Question(db.Model):
     requires_examples = db.Column(db.Boolean, default=False)
     requires_diagrams = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    teacher = db.relationship('User', backref='questions')
     submissions = db.relationship('Submission', backref='question', lazy='dynamic')
 
     def __repr__(self):
