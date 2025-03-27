@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('teacher_dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Submissions</li>
+                </ol>
+            </nav>
+            
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between">
+                    <h3 class="card-title h5 mb-0">{{ question.title }}</h3>
+                    <span class="badge bg-primary">{{ question.max_marks }} marks</span>
+                </div>
+                <div class="card-body">
+                    <p>{{ question.question_text }}</p>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>Student Submissions</h2>
+                <div>
+                    <span class="text-muted">Total: {{ submissions|length }} submission(s)</span>
+                </div>
+            </div>
+            
+            {% if submissions %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Student</th>
+                            <th>Submission Date</th>
+                            <th>Grade</th>
+                            <th>Sections</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for submission in submissions %}
+                        <tr>
+                            <td>{{ submission.user.username }}</td>
+                            <td>{{ submission.submission_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    {% set percentage = (submission.total_marks / question.max_marks) * 100 %}
+                                    <div class="progress-bar
+                                        {% if percentage < 40 %}bg-danger
+                                        {% elif percentage < 60 %}bg-warning
+                                        {% elif percentage < 80 %}bg-info
+                                        {% else %}bg-success{% endif %}"
+                                        role="progressbar" style="width: {{ percentage }}%;"
+                                        aria-valuenow="{{ submission.total_marks }}" aria-valuemin="0"
+                                        aria-valuemax="{{ question.max_marks }}">
+                                        {{ submission.total_marks }}/{{ question.max_marks }}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex">
+                                    <div class="me-2" data-bs-toggle="tooltip" title="Introduction: {{ submission.introduction_marks }}">
+                                        <span class="badge bg-secondary">I</span>
+                                    </div>
+                                    <div class="me-2" data-bs-toggle="tooltip" title="Main Body: {{ submission.main_body_marks }}">
+                                        <span class="badge bg-secondary">M</span>
+                                    </div>
+                                    <div class="me-2" data-bs-toggle="tooltip" title="Conclusion: {{ submission.conclusion_marks }}">
+                                        <span class="badge bg-secondary">C</span>
+                                    </div>
+                                    {% if question.requires_examples %}
+                                    <div class="me-2" data-bs-toggle="tooltip" title="Examples: {{ submission.examples_marks }}">
+                                        <span class="badge bg-secondary">E</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if question.requires_diagrams %}
+                                    <div data-bs-toggle="tooltip" title="Diagrams: {{ submission.diagrams_marks }}">
+                                        <span class="badge bg-secondary">D</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('review', submission_id=submission.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> Review
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No submissions for this question yet.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+    });
+</script>
+{% endblock %}

@@ -129,6 +129,35 @@ def teacher_dashboard():
         logging.error(f"Error in teacher dashboard: {str(e)}")
         flash('Error loading questions')
         return redirect(url_for('home'))
+        
+@app.route('/teacher/question/delete/<int:question_id>')
+@login_required
+def delete_question(question_id):
+    if current_user.role != 'teacher':
+        return redirect(url_for('login'))
+        
+    try:
+        question = Question.query.get_or_404(question_id)
+        
+        # Verify that the current teacher is the owner of this question
+        if question.teacher_id != current_user.id:
+            flash("You are not authorized to delete this question")
+            return redirect(url_for('teacher_dashboard'))
+            
+        # Delete all associated submissions first
+        Submission.query.filter_by(question_id=question_id).delete()
+        
+        # Then delete the question
+        db.session.delete(question)
+        db.session.commit()
+        
+        flash("Question and all associated submissions have been deleted")
+        return redirect(url_for('teacher_dashboard'))
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deleting question {question_id}: {str(e)}")
+        flash("An error occurred while trying to delete the question")
+        return redirect(url_for('teacher_dashboard'))
 
 @app.route('/teacher/question/new', methods=['GET', 'POST'])
 @login_required
@@ -207,21 +236,42 @@ def view_question(question_id):
             
         logging.debug(f"Student {current_user.id} with class '{current_user.class_name}' accessing question from teacher with class '{question.teacher.class_name}'")
 
-        # Check if student has already submitted an answer
-        existing_submission = Submission.query.filter_by(
+        # Get all student submissions for this question
+        all_submissions = Submission.query.filter_by(
             question_id=question_id,
             student_id=current_user.id
+        ).order_by(Submission.version.desc()).all()
+        
+        # Get the best submission for display
+        best_submission = Submission.query.filter_by(
+            question_id=question_id,
+            student_id=current_user.id,
+            is_best_submission=True
         ).first()
         
         # Log submission status for debugging
-        if existing_submission:
-            logging.debug(f"Found existing submission (id: {existing_submission.id}) for student {current_user.id}")
+        if best_submission:
+            logging.debug(f"Found best submission (id: {best_submission.id}, version: {best_submission.version}) for student {current_user.id}")
         else:
-            logging.debug(f"No existing submission found for student {current_user.id}, question {question_id}")
+            logging.debug(f"No submission found for student {current_user.id}, question {question_id}")
+            
+        # Get submission history for display
+        submission_history = []
+        for submission in all_submissions:
+            submission_history.append({
+                'id': submission.id,
+                'version': submission.version,
+                'date': submission.submission_date,
+                'score': submission.total_marks,
+                'is_best': submission.is_best_submission
+            })
+            
+        logging.debug(f"Submission history: {submission_history}")
 
         return render_template('student/submit_answer.html', 
                              question=question,
-                             submission=existing_submission)
+                             submission=best_submission,
+                             submission_history=submission_history)
     except Exception as e:
         logging.error(f"Error viewing question {question_id}: {str(e)}")
         flash('Question not found')
@@ -281,6 +331,7 @@ def extract_text():
 @app.route('/submit/<int:question_id>', methods=['POST'])
 @login_required
 def submit_answer(question_id):
+    """Initial submission of an answer to a question."""
     try:
         logging.debug(f"Starting submission for question_id: {question_id}")
         question = Question.query.get_or_404(question_id)
@@ -334,6 +385,15 @@ def submit_answer(question_id):
 
         # Create submission with validated data
         try:
+            # First check if this is the student's first submission
+            existing_submission = Submission.query.filter_by(
+                student_id=current_user.id,
+                question_id=question_id
+            ).first()
+            
+            # If this is the first submission, version is 1, otherwise track as later version
+            version = 1
+            
             submission = Submission(
                 answer=answer,
                 question_id=question_id,
@@ -348,12 +408,14 @@ def submit_answer(question_id):
                 main_body_feedback=str(grading_result['main_body']['feedback']),
                 conclusion_feedback=str(grading_result['conclusion']['feedback']),
                 examples_feedback=str(grading_result['examples']['feedback']),
-                diagrams_feedback=str(grading_result['diagrams']['feedback'])
+                diagrams_feedback=str(grading_result['diagrams']['feedback']),
+                version=version,
+                is_best_submission=True  # First submission is always the best by default
             )
 
             db.session.add(submission)
             db.session.commit()
-            logging.info(f"Successfully created submission: {submission.id}")
+            logging.info(f"Successfully created submission: {submission.id}, version: {version}")
 
             # First show the grading result
             flash('Your submission has been graded successfully. You can now view the detailed review.')
@@ -377,6 +439,140 @@ def submit_answer(question_id):
         logging.error(f"Error in submit_answer: {str(e)}")
         db.session.rollback()
         flash('Error during grading. Please try again.')
+        return redirect(url_for('view_question', question_id=question_id))
+
+@app.route('/resubmit/<int:question_id>', methods=['POST'])
+@login_required
+def resubmit_answer(question_id):
+    """Handle resubmission of an answer to a question with version tracking."""
+    try:
+        logging.debug(f"Starting resubmission for question_id: {question_id}")
+        
+        # Authorization check
+        if current_user.role != 'student':
+            logging.warning(f"Non-student user {current_user.id} attempted to resubmit")
+            flash('Only students can submit answers')
+            return redirect(url_for('home'))
+            
+        question = Question.query.get_or_404(question_id)
+        answer = request.form.get('answer')
+
+        if not answer:
+            logging.warning("No answer provided in resubmission")
+            flash('Please provide an answer')
+            return redirect(url_for('view_question', question_id=question_id))
+            
+        # Get the current version number
+        latest_submission = Submission.query.filter_by(
+            student_id=current_user.id, 
+            question_id=question_id
+        ).order_by(Submission.version.desc()).first()
+        
+        new_version = 1
+        if latest_submission:
+            new_version = latest_submission.version + 1
+            logging.debug(f"Creating new submission version {new_version}")
+
+        # Validate Gemini API key
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logging.error("Gemini API key not found")
+            flash('System configuration error. Please contact administrator.')
+            return redirect(url_for('view_question', question_id=question_id))
+
+        # Get grading result with error handling
+        try:
+            logging.debug("Calling analyze_with_gemini for resubmission")
+            grading_result = analyze_with_gemini(
+                question.question_text,
+                answer,
+                question.max_marks,
+                diagrams_required=question.requires_diagrams
+            )
+            logging.debug(f"Received grading result: {grading_result}")
+
+            if not grading_result or not isinstance(grading_result, dict):
+                logging.error(f"Invalid grading result format: {grading_result}")
+                flash('Error during grading. Please try again.')
+                return redirect(url_for('view_question', question_id=question_id))
+
+            # Validate required fields
+            required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams', 'total_marks']
+            if not all(field in grading_result for field in required_fields):
+                logging.error(f"Missing fields in grading result: {grading_result}")
+                flash('Error during grading. Please try again.')
+                return redirect(url_for('view_question', question_id=question_id))
+
+        except Exception as e:
+            logging.error(f"Error in analyze_with_gemini during resubmission: {str(e)}")
+            flash('Error during grading. Please try again.')
+            return redirect(url_for('view_question', question_id=question_id))
+
+        # Create new submission with version tracking
+        try:
+            new_submission = Submission(
+                answer=answer,
+                question_id=question_id,
+                student_id=current_user.id,
+                introduction_marks=float(grading_result['introduction']['marks']),
+                main_body_marks=float(grading_result['main_body']['marks']),
+                conclusion_marks=float(grading_result['conclusion']['marks']),
+                examples_marks=float(grading_result['examples']['marks']),
+                diagrams_marks=float(grading_result['diagrams']['marks']),
+                total_marks=float(grading_result['total_marks']),
+                introduction_feedback=str(grading_result['introduction']['feedback']),
+                main_body_feedback=str(grading_result['main_body']['feedback']),
+                conclusion_feedback=str(grading_result['conclusion']['feedback']),
+                examples_feedback=str(grading_result['examples']['feedback']),
+                diagrams_feedback=str(grading_result['diagrams']['feedback']),
+                version=new_version
+            )
+
+            # Check if this is a better score than previous versions
+            if latest_submission and new_submission.total_marks > latest_submission.total_marks:
+                # This is now the best submission
+                # Update all other submissions to not be the best
+                Submission.query.filter_by(
+                    student_id=current_user.id, 
+                    question_id=question_id
+                ).update({Submission.is_best_submission: False})
+                new_submission.is_best_submission = True
+                logging.info(f"New submission {new_version} is better than previous versions")
+            elif latest_submission and new_submission.total_marks <= latest_submission.total_marks:
+                # The previous submission was better
+                new_submission.is_best_submission = False
+                logging.info(f"Previous submission remains the best")
+            else:
+                # This is the first submission
+                new_submission.is_best_submission = True
+                logging.info(f"First submission is automatically the best")
+
+            db.session.add(new_submission)
+            db.session.commit()
+            logging.info(f"Successfully created resubmission: {new_submission.id}, version: {new_version}")
+
+            # First show the grading result
+            flash(f'Your resubmission (version {new_version}) has been graded successfully.')
+            
+            # Add question_id to the grading result for navigation
+            grading_result['question_id'] = question_id
+            
+            # Then show the grading page
+            return render_template('grading.html', 
+                                result=grading_result,
+                                submission_id=new_submission.id,
+                                max_marks=question.max_marks)
+
+        except Exception as e:
+            logging.error(f"Error creating resubmission: {str(e)}")
+            db.session.rollback()
+            flash('Error saving resubmission. Please try again.')
+            return redirect(url_for('view_question', question_id=question_id))
+
+    except Exception as e:
+        logging.error(f"Error in resubmit_answer: {str(e)}")
+        db.session.rollback()
+        flash('Error during resubmission. Please try again.')
         return redirect(url_for('view_question', question_id=question_id))
 
 @app.route('/review/<int:submission_id>')
@@ -426,6 +622,45 @@ def review(submission_id):
         flash('Error generating review. Please try again.')
         return redirect(url_for('home'))
 
+@app.route('/teacher/question/<int:question_id>/submissions')
+@login_required
+def view_submissions(question_id):
+    """View all best submissions for a question (teacher only)."""
+    try:
+        # Authorization check
+        if current_user.role != 'teacher':
+            logging.warning(f"Non-teacher user {current_user.id} attempted to view submissions")
+            flash('Only teachers can view all submissions')
+            return redirect(url_for('home'))
+            
+        # Get the question
+        question = Question.query.get_or_404(question_id)
+        
+        # Verify that the current teacher is the owner of this question
+        if question.teacher_id != current_user.id:
+            logging.warning(f"Teacher {current_user.id} tried to access question {question_id} owned by teacher {question.teacher_id}")
+            flash("You are not authorized to view these submissions")
+            return redirect(url_for('teacher_dashboard'))
+            
+        # Get only the best submission from each student
+        best_submissions = Submission.query.filter_by(
+            question_id=question_id,
+            is_best_submission=True
+        ).order_by(Submission.total_marks.desc()).all()
+        
+        logging.debug(f"Found {len(best_submissions)} best submissions for question {question_id}")
+        
+        return render_template(
+            'teacher/submissions.html', 
+            question=question, 
+            submissions=best_submissions
+        )
+    
+    except Exception as e:
+        logging.error(f"Error viewing submissions for question {question_id}: {str(e)}")
+        flash('Error loading submissions')
+        return redirect(url_for('teacher_dashboard'))
+        
 # Database initialization with error handling
 with app.app_context():
     try:

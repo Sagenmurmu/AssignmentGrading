@@ -34,11 +34,109 @@
                     <p>Your answer has been submitted and graded.</p>
                     <hr>
                     <p class="mb-0">Total Score: {{ submission.total_marks }}/{{ question.max_marks }}</p>
+                    <p class="mb-0">Submission Version: {{ submission.version }}</p>
+                    {% if submission.is_best_submission %}
+                    <p class="mb-0 text-success"><i class="bi bi-trophy"></i> This is your highest-scoring submission</p>
+                    {% endif %}
                 </div>
                 <div class="d-grid gap-2">
                     <a href="{{ url_for('review', submission_id=submission.id) }}" class="btn btn-primary btn-lg mb-3">
                         <i class="bi bi-journal-text"></i> View Detailed Review
                     </a>
+                    
+                    <!-- Add resubmit button that toggles the submission form -->
+                    <button id="show-resubmit-form" class="btn btn-outline-secondary mb-3">
+                        <i class="bi bi-arrow-repeat"></i> Resubmit Answer
+                    </button>
+                    
+                    {% if submission_history and submission_history|length > 1 %}
+                    <button class="btn btn-outline-info mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#submissionHistory">
+                        <i class="bi bi-clock-history"></i> View Submission History ({{ submission_history|length }} versions)
+                    </button>
+                    
+                    <div class="collapse mb-3" id="submissionHistory">
+                        <div class="card card-body">
+                            <h5>Your Submission History</h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Version</th>
+                                            <th>Date</th>
+                                            <th>Score</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sub in submission_history %}
+                                        <tr{% if sub.is_best %} class="table-success"{% endif %}>
+                                            <td>{{ sub.version }}</td>
+                                            <td>{{ sub.date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>{{ sub.score }}</td>
+                                            <td>
+                                                {% if sub.is_best %}
+                                                <span class="badge bg-success">Best Score</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('review', submission_id=sub.id) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-eye"></i> View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div id="resubmit-form" style="display: none;">
+                        <div class="alert alert-warning">
+                            <strong>Note:</strong> Resubmitting will replace your current submission. Only your highest scoring submission will be visible to your teacher.
+                        </div>
+                        
+                        <form id="submission-form" action="{{ url_for('resubmit_answer', question_id=question.id) }}" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label">Upload Answer (PDF or Image)</label>
+                                <div class="drop-zone" id="drop-zone">
+                                    <div class="drop-zone-prompt">
+                                        <i class="bi bi-cloud-upload"></i>
+                                        <p>Drag and drop files here or click to upload</p>
+                                        <p class="small text-muted">Supported formats: PDF, PNG, JPG</p>
+                                    </div>
+                                    <input type="file" id="file-upload" class="drop-zone-input" accept=".pdf,.png,.jpg,.jpeg">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="answer" class="form-label">Your Answer</label>
+                                <textarea class="form-control" id="answer" name="answer" rows="10" required></textarea>
+                                <div class="form-text">
+                                    {% if question.requires_examples %}
+                                    <div><i class="bi bi-info-circle"></i> Remember to include examples in your answer.</div>
+                                    {% endif %}
+                                    {% if question.requires_diagrams %}
+                                    <div><i class="bi bi-info-circle"></i> Remember to include diagrams in your answer.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="button" id="extract-text" class="btn btn-secondary">
+                                    <i class="bi bi-eye"></i> Extract Text
+                                </button>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="bi bi-send"></i> Submit New Answer
+                                </button>
+                                <button type="button" id="cancel-resubmit" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
                 {% else %}
                 <!-- Show submission form -->
@@ -82,4 +180,29 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle resubmit form
+        const showResubmitBtn = document.getElementById('show-resubmit-form');
+        const resubmitForm = document.getElementById('resubmit-form');
+        const cancelResubmitBtn = document.getElementById('cancel-resubmit');
+        
+        if (showResubmitBtn && resubmitForm) {
+            showResubmitBtn.addEventListener('click', function() {
+                resubmitForm.style.display = 'block';
+                showResubmitBtn.style.display = 'none';
+            });
+        }
+        
+        if (cancelResubmitBtn && resubmitForm && showResubmitBtn) {
+            cancelResubmitBtn.addEventListener('click', function() {
+                resubmitForm.style.display = 'none';
+                showResubmitBtn.style.display = 'block';
+            });
+        }
+    });
+</script>
 {% endblock %}

@@ -8,6 +8,22 @@
                 <h2 class="card-title">Detailed Review</h2>
             </div>
             <div class="card-body">
+                <div class="alert alert-info">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h4>Assignment: {{ question.title }}</h4>
+                            <p>Total Score: <strong>{{ submission.total_marks }}/{{ question.max_marks }}</strong></p>
+                            <p>Submission Date: {{ submission.submission_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <p>Version: <strong>{{ submission.version }}</strong></p>
+                            {% if submission.is_best_submission %}
+                            <p class="text-success"><i class="bi bi-trophy"></i> Highest-scoring submission</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="review-content">
                     {{ feedback|safe }}
                 </div>

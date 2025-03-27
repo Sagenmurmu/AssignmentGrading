@@ -76,6 +76,10 @@ class Submission(db.Model):
     plagiarism_score = db.Column(db.Float)
     plagiarism_matches = db.Column(TEXT)
     hash_signature = db.Column(db.String(64))
+    # New field to track if this is the best submission
+    is_best_submission = db.Column(db.Boolean, default=True)
+    # New field to track submission version for a student
+    version = db.Column(db.Integer, default=1)
 
 
     def __repr__(self):
