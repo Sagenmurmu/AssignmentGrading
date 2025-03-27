@@ -190,6 +190,12 @@ def view_question(question_id):
             question_id=question_id,
             student_id=current_user.id
         ).first()
+        
+        # Log submission status for debugging
+        if existing_submission:
+            logging.debug(f"Found existing submission (id: {existing_submission.id}) for student {current_user.id}")
+        else:
+            logging.debug(f"No existing submission found for student {current_user.id}, question {question_id}")
 
         return render_template('student/submit_answer.html', 
                              question=question,
@@ -327,6 +333,13 @@ def submit_answer(question_id):
             db.session.commit()
             logging.info(f"Successfully created submission: {submission.id}")
 
+            # First show the grading result
+            flash('Your submission has been graded successfully. You can now view the detailed review.')
+            
+            # Add question_id to the grading result for navigation
+            grading_result['question_id'] = question_id
+            
+            # Then redirect back to the question page to see the review button
             return render_template('grading.html', 
                                    result=grading_result,
                                    submission_id=submission.id,
@@ -351,24 +364,43 @@ def review(submission_id):
         submission = Submission.query.get_or_404(submission_id)
         question = submission.question
 
+        # Debug logs to identify authorization issues
+        logging.debug(f"Review requested for submission {submission_id}")
+        logging.debug(f"Current user: {current_user.id}, role: {current_user.role}")
+        logging.debug(f"Submission student_id: {submission.student_id}")
+        logging.debug(f"Question teacher_id: {question.teacher_id}")
+
         # Allow both teachers and students who own the submission to view it
-        if (current_user.role == 'teacher' and question.teacher_id == current_user.id) or \
-           (current_user.role == 'student' and submission.student_id == current_user.id):
-            review_feedback = analyze_with_gemini(
-                question.question_text,
-                submission.answer,
-                question.max_marks,
-                mode='review'
-            )
-            return render_template('review.html', 
-                                feedback=review_feedback,
-                                submission=submission,
-                                question=question)
+        is_teacher_owner = current_user.role == 'teacher' and question.teacher_id == current_user.id
+        is_student_owner = current_user.role == 'student' and submission.student_id == current_user.id
+        
+        if is_teacher_owner or is_student_owner:
+            logging.debug(f"Authorization granted: teacher_owner={is_teacher_owner}, student_owner={is_student_owner}")
+            
+            try:
+                review_feedback = analyze_with_gemini(
+                    question.question_text,
+                    submission.answer,
+                    question.max_marks,
+                    mode='review'
+                )
+                return render_template('review.html', 
+                                    feedback=review_feedback,
+                                    submission=submission,
+                                    question=question)
+            except Exception as e:
+                logging.error(f"Error generating AI review: {str(e)}")
+                # Provide a basic review if AI fails
+                return render_template('review.html', 
+                                    feedback="AI review generation failed. Please try again later.",
+                                    submission=submission,
+                                    question=question)
         else:
+            logging.warning(f"Unauthorized review attempt: user_id={current_user.id}, submission_id={submission_id}")
             flash("You are not authorized to review this submission.")
             return redirect(url_for('home'))
     except Exception as e:
-        logging.error(f"Error generating review: {str(e)}")
+        logging.error(f"Error accessing submission for review: {str(e)}")
         flash('Error generating review. Please try again.')
         return redirect(url_for('home'))
 

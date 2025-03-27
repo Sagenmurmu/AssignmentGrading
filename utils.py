@@ -86,8 +86,8 @@ Grading Rules:
    - Conclusion (2 marks max - 20%)
 2. Bonus scoring:
    - Examples: Mark as 0 if none found
-   - Diagrams: Mark as 0 if none found
-   - Only grade diagrams if they are present in the answer
+   - Diagrams: IMPORTANT - Mark as 0 unless explicit diagrams are present. Text descriptions without actual diagrams should get 0 marks.
+   - Only award marks for diagrams if there are actual diagrams or visual elements in the answer, not just text descriptions.
 
 Return the following JSON structure EXACTLY, with no additional text:
 {{
@@ -179,6 +179,18 @@ Return the following JSON structure EXACTLY, with no additional text:
             for section in ['examples', 'diagrams']:
                 try:
                     marks = float(result[section]['marks'])
+                    
+                    # For diagrams, check if it contains phrases indicating actual diagrams
+                    if section == 'diagrams':
+                        diagram_feedback = str(result[section]['feedback']).lower()
+                        diagram_indicators = ['diagram', 'figure', 'chart', 'graph', 'illustration', 'visual']
+                        has_diagram_content = any(indicator in diagram_feedback for indicator in diagram_indicators)
+                        
+                        # If no diagram content is detected, force marks to 0
+                        if not has_diagram_content:
+                            marks = 0
+                            result[section]['feedback'] = "No diagrams provided in the submission"
+                    
                     if marks > 0:  # Only if content is present
                         bonus_max = max_marks * (0.2 if (section == 'diagrams' and diagrams_required) else 0.1)
                         scaled_result[section] = {

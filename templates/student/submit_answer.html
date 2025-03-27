@@ -36,7 +36,7 @@
                     <p class="mb-0">Total Score: {{ submission.total_marks }}/{{ question.max_marks }}</p>
                 </div>
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('review', submission_id=submission.id) }}" class="btn btn-primary">
+                    <a href="{{ url_for('review', submission_id=submission.id) }}" class="btn btn-primary btn-lg mb-3">
                         <i class="bi bi-journal-text"></i> View Detailed Review
                     </a>
                 </div>
