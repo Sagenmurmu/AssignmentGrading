@@ -166,7 +166,23 @@ def home():
         return redirect(url_for('login'))
 
     try:
-        questions = Question.query.filter(Question.deadline > datetime.utcnow(), Question.teacher_id.in_([t.id for t in User.query.filter_by(class_name=current_user.class_name, role='teacher').all()])).all()
+        # If the student has a class name, filter questions by teachers in the same class
+        if current_user.class_name:
+            teacher_ids = [t.id for t in User.query.filter_by(class_name=current_user.class_name, role='teacher').all()]
+        else:
+            # If the student doesn't have a class name, show questions from all teachers
+            teacher_ids = [t.id for t in User.query.filter_by(role='teacher').all()]
+            
+        # Debug log the teacher IDs
+        logging.debug(f"Filtering questions for teachers: {teacher_ids}")
+        
+        # Get questions that haven't expired
+        questions = Question.query.filter(
+            Question.deadline > datetime.utcnow(),
+            Question.teacher_id.in_(teacher_ids)
+        ).all()
+        
+        logging.debug(f"Found {len(questions)} questions for student {current_user.id}")
         return render_template('student/questions.html', questions=questions)
     except Exception as e:
         logging.error(f"Error loading questions: {str(e)}")
@@ -181,9 +197,15 @@ def view_question(question_id):
 
     try:
         question = Question.query.get_or_404(question_id)
-        if question.teacher.class_name != current_user.class_name:
+        
+        # Allow access if either:
+        # 1. Both teacher and student have matching class_name (not empty), OR
+        # 2. At least one of them has an empty class_name
+        if question.teacher.class_name and current_user.class_name and question.teacher.class_name != current_user.class_name:
             flash("You are not authorized to view this question.")
             return redirect(url_for('home'))
+            
+        logging.debug(f"Student {current_user.id} with class '{current_user.class_name}' accessing question from teacher with class '{question.teacher.class_name}'")
 
         # Check if student has already submitted an answer
         existing_submission = Submission.query.filter_by(
