@@ -5,15 +5,15 @@ import re
 from PIL import Image
 import google.generativeai as genai
 
-# Configure logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 def clean_text(text):
-    """Clean and normalize extracted text."""
+    
     try:
-        # Remove extra whitespace
+
         text = re.sub(r'\s+', ' ', text)
-        # Normalize line breaks
+        
         text = re.sub(r'[\r\n]+', '\n', text)
         return text.strip()
     except Exception as e:
@@ -21,14 +21,12 @@ def clean_text(text):
         return text if text else ""
 
 def extract_text_from_image(image_path):
-    """Extract text from image using Gemini AI's vision capabilities."""
+    
     try:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("Gemini API key not found")
+        api_key = "your gemini api key"
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         with Image.open(image_path) as image:
             prompt = """Extract all text from this image.
@@ -52,7 +50,7 @@ def extract_text_from_image(image_path):
         raise
 
 def extract_text_from_pdf(pdf_path):
-    """Extract text from PDF."""
+    
     try:
         return "PDF extraction is being updated. Please upload images directly for better results."
     except Exception as e:
@@ -60,14 +58,12 @@ def extract_text_from_pdf(pdf_path):
         raise
 
 def analyze_with_gemini(question, answer, max_marks, mode='grade', diagrams_required=False):
-    """Analyze text using Gemini AI with improved error handling."""
+    
     try:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("Gemini API key not found")
+        api_key = "your gemini api key"
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         if mode == 'grade':
             scaling_factor = max_marks / 10
@@ -126,7 +122,7 @@ Return the following JSON structure EXACTLY, with no additional text:
                     if not response or not response.text:
                         raise ValueError("Empty response from Gemini API")
 
-                    # Extract JSON from response
+                    
                     text = response.text.strip()
                     start_idx = text.find('{')
                     end_idx = text.rfind('}') + 1
@@ -137,7 +133,7 @@ Return the following JSON structure EXACTLY, with no additional text:
                     json_str = text[start_idx:end_idx]
                     logging.debug(f"Extracted JSON string: {json_str}")
 
-                    # Parse and validate JSON structure
+                    
                     result = json.loads(json_str)
 
                     required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams']
@@ -159,7 +155,7 @@ Return the following JSON structure EXACTLY, with no additional text:
                     if retry_count >= max_retries:
                         raise ValueError(f"Failed to get valid response after {max_retries} attempts")
 
-            # Calculate scaled marks
+            
             scaled_result = {}
             for section in ['introduction', 'main_body', 'conclusion']:
                 try:
@@ -175,18 +171,18 @@ Return the following JSON structure EXACTLY, with no additional text:
                         'feedback': 'Error calculating marks'
                     }
 
-            # Handle bonus marks (examples and diagrams)
+            
             for section in ['examples', 'diagrams']:
                 try:
                     marks = float(result[section]['marks'])
                     
-                    # For diagrams, check if it contains phrases indicating actual diagrams
+                    
                     if section == 'diagrams':
                         diagram_feedback = str(result[section]['feedback']).lower()
                         diagram_indicators = ['diagram', 'figure', 'chart', 'graph', 'illustration', 'visual']
                         has_diagram_content = any(indicator in diagram_feedback for indicator in diagram_indicators)
                         
-                        # If no diagram content is detected, force marks to 0
+                        
                         if not has_diagram_content:
                             marks = 0
                             result[section]['feedback'] = "No diagrams provided in the submission"
@@ -208,7 +204,7 @@ Return the following JSON structure EXACTLY, with no additional text:
                         'feedback': 'Error calculating marks'
                     }
 
-            # Calculate total marks
+            
             base_marks = sum(scaled_result[s]['marks'] for s in ['introduction', 'main_body', 'conclusion'])
             bonus_marks = sum(scaled_result[s]['marks'] for s in ['examples', 'diagrams'])
             total_marks = min(base_marks + bonus_marks, max_marks)

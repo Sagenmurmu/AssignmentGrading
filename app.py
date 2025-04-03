@@ -9,20 +9,19 @@ from datetime import datetime
 from models import db, User, Question, Submission
 from utils import extract_text_from_pdf, extract_text_from_image, analyze_with_gemini
 
-# Configure logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET")
 if not app.secret_key:
-    # Generate a secure random key if SESSION_SECRET is not set
+    
     import secrets
     app.secret_key = secrets.token_hex(32)
 
-# Configure database
-database_url = os.environ.get("DATABASE_URL")
-if database_url and database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+database_url = "URL for your database"
+
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -30,25 +29,26 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_pre_ping": True,
 }
 app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
 
-# Create upload folder if it doesn't exist
+
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
     logging.info(f"Created upload folder: {app.config['UPLOAD_FOLDER']}")
 
-# Configure Gemini AI
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# Initialize database
+genai.configure(api_key="Your Gemini API key here")
+genai.GenerativeModel("gemini-2.0-flash")
+
+
 db.init_app(app)
 
-# Initialize Flask-Login
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Load user from database
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -60,7 +60,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# Authentication routes
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -115,7 +115,7 @@ def register():
     return render_template('register.html')
 
 
-# Teacher routes (updated with login_required)
+
 @app.route('/teacher')
 @login_required
 def teacher_dashboard():
@@ -139,15 +139,15 @@ def delete_question(question_id):
     try:
         question = Question.query.get_or_404(question_id)
         
-        # Verify that the current teacher is the owner of this question
+        
         if question.teacher_id != current_user.id:
             flash("You are not authorized to delete this question")
             return redirect(url_for('teacher_dashboard'))
             
-        # Delete all associated submissions first
+        
         Submission.query.filter_by(question_id=question_id).delete()
         
-        # Then delete the question
+        
         db.session.delete(question)
         db.session.commit()
         
@@ -187,7 +187,7 @@ def create_question():
     return render_template('teacher/create_question.html')
 
 
-# Student routes (updated with login_required and class filtering)
+
 @app.route('/')
 @login_required
 def home():
@@ -202,10 +202,10 @@ def home():
             # If the student doesn't have a class name, show questions from all teachers
             teacher_ids = [t.id for t in User.query.filter_by(role='teacher').all()]
             
-        # Debug log the teacher IDs
+        
         logging.debug(f"Filtering questions for teachers: {teacher_ids}")
         
-        # Get questions that haven't expired
+        
         questions = Question.query.filter(
             Question.deadline > datetime.utcnow(),
             Question.teacher_id.in_(teacher_ids)
@@ -227,35 +227,33 @@ def view_question(question_id):
     try:
         question = Question.query.get_or_404(question_id)
         
-        # Allow access if either:
-        # 1. Both teacher and student have matching class_name (not empty), OR
-        # 2. At least one of them has an empty class_name
+        
         if question.teacher.class_name and current_user.class_name and question.teacher.class_name != current_user.class_name:
             flash("You are not authorized to view this question.")
             return redirect(url_for('home'))
             
         logging.debug(f"Student {current_user.id} with class '{current_user.class_name}' accessing question from teacher with class '{question.teacher.class_name}'")
 
-        # Get all student submissions for this question
+        
         all_submissions = Submission.query.filter_by(
             question_id=question_id,
             student_id=current_user.id
         ).order_by(Submission.version.desc()).all()
         
-        # Get the best submission for display
+        
         best_submission = Submission.query.filter_by(
             question_id=question_id,
             student_id=current_user.id,
             is_best_submission=True
         ).first()
         
-        # Log submission status for debugging
+        
         if best_submission:
             logging.debug(f"Found best submission (id: {best_submission.id}, version: {best_submission.version}) for student {current_user.id}")
         else:
             logging.debug(f"No submission found for student {current_user.id}, question {question_id}")
             
-        # Get submission history for display
+        
         submission_history = []
         for submission in all_submissions:
             submission_history.append({
@@ -277,7 +275,7 @@ def view_question(question_id):
         flash('Question not found')
         return redirect(url_for('home'))
 
-#Extract and Submit routes
+
 @app.route('/extract', methods=['POST'])
 def extract_text():
     try:
@@ -316,7 +314,7 @@ def extract_text():
                 logging.error(f"Error in text extraction: {str(e)}")
                 return jsonify({'success': False, 'error': str(e)}), 500
             finally:
-                # Clean up uploaded file
+                
                 if os.path.exists(filepath):
                     os.remove(filepath)
                     logging.debug(f"Cleaned up file: {filepath}")
@@ -331,7 +329,7 @@ def extract_text():
 @app.route('/submit/<int:question_id>', methods=['POST'])
 @login_required
 def submit_answer(question_id):
-    """Initial submission of an answer to a question."""
+    
     try:
         logging.debug(f"Starting submission for question_id: {question_id}")
         question = Question.query.get_or_404(question_id)
@@ -342,20 +340,20 @@ def submit_answer(question_id):
             flash('Please provide an answer')
             return redirect(url_for('view_question', question_id=question_id))
 
-        # Log input data for debugging
+        
         logging.debug(f"Question text: {question.question_text}")
         logging.debug(f"Answer length: {len(answer)}")
         logging.debug(f"Max marks: {question.max_marks}")
         logging.debug(f"Diagrams required: {question.requires_diagrams}")
 
-        # Validate Gemini API key
-        api_key = os.environ.get("GEMINI_API_KEY")
+        
+        api_key = "your gemini api key"
         if not api_key:
             logging.error("Gemini API key not found")
             flash('System configuration error. Please contact administrator.')
             return redirect(url_for('view_question', question_id=question_id))
 
-        # Get grading result with error handling
+        
         try:
             logging.debug("Calling analyze_with_gemini")
             grading_result = analyze_with_gemini(
@@ -371,7 +369,7 @@ def submit_answer(question_id):
                 flash('Error during grading. Please try again.')
                 return redirect(url_for('view_question', question_id=question_id))
 
-            # Validate required fields
+            
             required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams', 'total_marks']
             if not all(field in grading_result for field in required_fields):
                 logging.error(f"Missing fields in grading result: {grading_result}")
@@ -383,15 +381,14 @@ def submit_answer(question_id):
             flash('Error during grading. Please try again.')
             return redirect(url_for('view_question', question_id=question_id))
 
-        # Create submission with validated data
+        
         try:
-            # First check if this is the student's first submission
             existing_submission = Submission.query.filter_by(
                 student_id=current_user.id,
                 question_id=question_id
             ).first()
             
-            # If this is the first submission, version is 1, otherwise track as later version
+            
             version = 1
             
             submission = Submission(
@@ -410,20 +407,20 @@ def submit_answer(question_id):
                 examples_feedback=str(grading_result['examples']['feedback']),
                 diagrams_feedback=str(grading_result['diagrams']['feedback']),
                 version=version,
-                is_best_submission=True  # First submission is always the best by default
+                is_best_submission=True  
             )
 
             db.session.add(submission)
             db.session.commit()
             logging.info(f"Successfully created submission: {submission.id}, version: {version}")
 
-            # First show the grading result
+            
             flash('Your submission has been graded successfully. You can now view the detailed review.')
             
-            # Add question_id to the grading result for navigation
+            
             grading_result['question_id'] = question_id
             
-            # Then redirect back to the question page to see the review button
+            
             return render_template('grading.html', 
                                    result=grading_result,
                                    submission_id=submission.id,
@@ -448,7 +445,7 @@ def resubmit_answer(question_id):
     try:
         logging.debug(f"Starting resubmission for question_id: {question_id}")
         
-        # Authorization check
+        
         if current_user.role != 'student':
             logging.warning(f"Non-student user {current_user.id} attempted to resubmit")
             flash('Only students can submit answers')
@@ -462,7 +459,7 @@ def resubmit_answer(question_id):
             flash('Please provide an answer')
             return redirect(url_for('view_question', question_id=question_id))
             
-        # Get the current version number
+        
         latest_submission = Submission.query.filter_by(
             student_id=current_user.id, 
             question_id=question_id
@@ -473,14 +470,14 @@ def resubmit_answer(question_id):
             new_version = latest_submission.version + 1
             logging.debug(f"Creating new submission version {new_version}")
 
-        # Validate Gemini API key
-        api_key = os.environ.get("GEMINI_API_KEY")
+        
+        api_key = "your gemini api key"
         if not api_key:
             logging.error("Gemini API key not found")
             flash('System configuration error. Please contact administrator.')
             return redirect(url_for('view_question', question_id=question_id))
 
-        # Get grading result with error handling
+        
         try:
             logging.debug("Calling analyze_with_gemini for resubmission")
             grading_result = analyze_with_gemini(
@@ -496,7 +493,7 @@ def resubmit_answer(question_id):
                 flash('Error during grading. Please try again.')
                 return redirect(url_for('view_question', question_id=question_id))
 
-            # Validate required fields
+            
             required_fields = ['introduction', 'main_body', 'conclusion', 'examples', 'diagrams', 'total_marks']
             if not all(field in grading_result for field in required_fields):
                 logging.error(f"Missing fields in grading result: {grading_result}")
@@ -508,7 +505,7 @@ def resubmit_answer(question_id):
             flash('Error during grading. Please try again.')
             return redirect(url_for('view_question', question_id=question_id))
 
-        # Create new submission with version tracking
+        
         try:
             new_submission = Submission(
                 answer=answer,
@@ -528,10 +525,9 @@ def resubmit_answer(question_id):
                 version=new_version
             )
 
-            # Check if this is a better score than previous versions
+            
             if latest_submission and new_submission.total_marks > latest_submission.total_marks:
-                # This is now the best submission
-                # Update all other submissions to not be the best
+                
                 Submission.query.filter_by(
                     student_id=current_user.id, 
                     question_id=question_id
@@ -539,11 +535,9 @@ def resubmit_answer(question_id):
                 new_submission.is_best_submission = True
                 logging.info(f"New submission {new_version} is better than previous versions")
             elif latest_submission and new_submission.total_marks <= latest_submission.total_marks:
-                # The previous submission was better
                 new_submission.is_best_submission = False
                 logging.info(f"Previous submission remains the best")
             else:
-                # This is the first submission
                 new_submission.is_best_submission = True
                 logging.info(f"First submission is automatically the best")
 
@@ -551,13 +545,13 @@ def resubmit_answer(question_id):
             db.session.commit()
             logging.info(f"Successfully created resubmission: {new_submission.id}, version: {new_version}")
 
-            # First show the grading result
+
             flash(f'Your resubmission (version {new_version}) has been graded successfully.')
             
-            # Add question_id to the grading result for navigation
+            
             grading_result['question_id'] = question_id
             
-            # Then show the grading page
+            
             return render_template('grading.html', 
                                 result=grading_result,
                                 submission_id=new_submission.id,
@@ -582,13 +576,13 @@ def review(submission_id):
         submission = Submission.query.get_or_404(submission_id)
         question = submission.question
 
-        # Debug logs to identify authorization issues
+        
         logging.debug(f"Review requested for submission {submission_id}")
         logging.debug(f"Current user: {current_user.id}, role: {current_user.role}")
         logging.debug(f"Submission student_id: {submission.student_id}")
         logging.debug(f"Question teacher_id: {question.teacher_id}")
 
-        # Allow both teachers and students who own the submission to view it
+        
         is_teacher_owner = current_user.role == 'teacher' and question.teacher_id == current_user.id
         is_student_owner = current_user.role == 'student' and submission.student_id == current_user.id
         
@@ -608,7 +602,7 @@ def review(submission_id):
                                     question=question)
             except Exception as e:
                 logging.error(f"Error generating AI review: {str(e)}")
-                # Provide a basic review if AI fails
+                
                 return render_template('review.html', 
                                     feedback="AI review generation failed. Please try again later.",
                                     submission=submission,
@@ -627,22 +621,22 @@ def review(submission_id):
 def view_submissions(question_id):
     """View all best submissions for a question (teacher only)."""
     try:
-        # Authorization check
+        
         if current_user.role != 'teacher':
             logging.warning(f"Non-teacher user {current_user.id} attempted to view submissions")
             flash('Only teachers can view all submissions')
             return redirect(url_for('home'))
             
-        # Get the question
+        
         question = Question.query.get_or_404(question_id)
         
-        # Verify that the current teacher is the owner of this question
+        
         if question.teacher_id != current_user.id:
             logging.warning(f"Teacher {current_user.id} tried to access question {question_id} owned by teacher {question.teacher_id}")
             flash("You are not authorized to view these submissions")
             return redirect(url_for('teacher_dashboard'))
             
-        # Get only the best submission from each student
+        
         best_submissions = Submission.query.filter_by(
             question_id=question_id,
             is_best_submission=True
@@ -661,7 +655,7 @@ def view_submissions(question_id):
         flash('Error loading submissions')
         return redirect(url_for('teacher_dashboard'))
         
-# Database initialization with error handling
+
 with app.app_context():
     try:
         db.create_all()
@@ -672,4 +666,4 @@ with app.app_context():
         raise
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)

@@ -13,9 +13,9 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), nullable=False)
-    class_name = db.Column(db.String(20), nullable=True)  # e.g., "10A", "10B"
-    teacher_code = db.Column(db.String(128), nullable=True)  # For teacher verification
-    student_code = db.Column(db.String(128), nullable=True)  # For student verification
+    class_name = db.Column(db.String(20), nullable=True)  
+    teacher_code = db.Column(db.String(128), nullable=True)  
+    student_code = db.Column(db.String(128), nullable=True)  
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -76,9 +76,9 @@ class Submission(db.Model):
     plagiarism_score = db.Column(db.Float)
     plagiarism_matches = db.Column(TEXT)
     hash_signature = db.Column(db.String(64))
-    # New field to track if this is the best submission
+    
     is_best_submission = db.Column(db.Boolean, default=True)
-    # New field to track submission version for a student
+    
     version = db.Column(db.Integer, default=1)
 
 
